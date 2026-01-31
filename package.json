@@ -1,0 +1,49 @@
+{
+  "name": "zotero-bridge",
+  "version": "1.0.0",
+  "description": "ZoteroBridge - MCP Server for Zotero SQLite Database Integration",
+  "author": "Combjellyshen",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "zotero-bridge": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "node test/run-test.mjs",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "zotero",
+    "mcp",
+    "model-context-protocol",
+    "sqlite",
+    "reference-management",
+    "pdf",
+    "research"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Combjellyshen/ZoteroBridge"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "sql.js": "^1.10.0",
+    "pdf-parse": "^1.1.1",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/sql.js": "^1.4.9",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.0"
+  }
+}
