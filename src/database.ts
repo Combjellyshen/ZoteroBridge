@@ -1190,9 +1190,18 @@ export class ZoteroDatabase {
 
   /**
    * Generate a unique Zotero key
+   * 
+   * Zotero uses a specific character set that excludes ambiguous characters:
+   * - No '0' (zero) - confused with 'O'
+   * - No '1' (one) - confused with 'I' or 'L'  
+   * - No 'I' - confused with '1' or 'L'
+   * - No 'L' - confused with '1' or 'I'
+   * - No 'O' - confused with '0'
+   * 
+   * Valid characters: 23456789ABCDEFGHJKMNPQRSTUVWXYZ
    */
   private generateKey(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
     let key = '';
     for (let i = 0; i < 8; i++) {
       key += chars.charAt(Math.floor(Math.random() * chars.length));
