@@ -35,7 +35,16 @@ ZoteroBridge 是一个模型上下文协议 (MCP) 服务器，可直接连接到
 ---
 
 ## � 更新日志
+### v1.1.5 (2026-02-01)
 
+🗑️ **回收站识别功能**
+- ✅ 所有查询函数现在正确排除 `deletedItems` 表中的条目
+- ✅ `getItemDetails` 新增 `isDeleted` 和 `dateDeleted` 字段
+- ✅ `findItemByDOI/ISBN/Identifier` 自动跳过回收站中的条目
+- ✅ 新增 `isItemDeleted()` 方法检查条目是否在回收站
+- ✅ 新增 `getDeletedItems()` 方法获取回收站内容
+- ✅ 新增 `getDeletedItemsCount()` 方法获取回收站条目数量
+- ✅ 附件查询也排除已删除的附件
 ### v1.1.3 (2026-02-01)
 
 🔧 **修复**
@@ -386,7 +395,24 @@ zotero-bridge --readonly
 ---
 
 ## 📝 更新日志
+### v1.1.4 (2026-02-01)
 
+🔧 **重要修复 - 数据库兼容性**
+- ✅ 修复重复项查询不一致问题 - `findItemByDOI/ISBN` 现在始终返回最新修改的条目
+- ✅ 修复 `itemTags.type` 字段 - 该字段为 NOT NULL，必须提供值
+- ✅ 动态获取 `note`/`attachment` 的 itemTypeID，不再硬编码
+- ✅ 所有查询现在排除 `deletedItems` 表中的已删除条目
+
+🚀 **新功能**
+- ✨ 添加事务支持 (`beginTransaction/commitTransaction/rollbackTransaction`)
+- ✨ `mergeItems` 现在使用事务保证数据一致性
+- ✨ `mergeItems` 新增附件转移功能
+- ✨ 重复项查询现在返回 `_duplicateWarning` 警告信息
+
+🛡️ **安全性改进**
+- 所有写操作前检查 Zotero 进程状态
+- 自动创建数据库备份
+- 批量操作使用事务保护
 ### v1.1.2 (2025-02-01)
 - 更新所有依赖到最新版本
 - 修复 Zod 4.x 兼容性问题

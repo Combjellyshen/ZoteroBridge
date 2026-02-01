@@ -352,6 +352,94 @@ export class ZoteroDatabase {
     };
   }
 
+  /**
+   * Begin a transaction for batch operations
+   * IMPORTANT: Always use try-finally to ensure commit/rollback
+   */
+  beginTransaction(): void {
+    if (!this.db) {
+      throw new Error('Database not connected');
+    }
+    this.db.run('BEGIN TRANSACTION');
+  }
+
+  /**
+   * Commit the current transaction
+   */
+  commitTransaction(): void {
+    if (!this.db) {
+      throw new Error('Database not connected');
+    }
+    this.db.run('COMMIT');
+  }
+
+  /**
+   * Rollback the current transaction
+   */
+  rollbackTransaction(): void {
+    if (!this.db) {
+      throw new Error('Database not connected');
+    }
+    try {
+      this.db.run('ROLLBACK');
+    } catch (e) {
+      // Ignore if no transaction is active
+    }
+  }
+
+  /**
+   * Execute a function within a transaction
+   * Automatically commits on success, rolls back on error
+   */
+  withTransaction<T>(fn: () => T): T {
+    this.beginTransaction();
+    try {
+      const result = fn();
+      this.commitTransaction();
+      return result;
+    } catch (error) {
+      this.rollbackTransaction();
+      throw error;
+    }
+  }
+
+  // ============================================
+  // Trash / Deleted Items Operations
+  // ============================================
+
+  /**
+   * Check if an item is in the trash (deletedItems table)
+   */
+  isItemDeleted(itemID: number): boolean {
+    const result = this.queryOne('SELECT 1 FROM deletedItems WHERE itemID = ?', [itemID]);
+    return !!result;
+  }
+
+  /**
+   * Get all items in trash with details
+   */
+  getDeletedItems(): any[] {
+    return this.queryAll(`
+      SELECT d.itemID, d.dateDeleted, i.key, i.itemTypeID, it.typeName,
+             (SELECT iv.value FROM itemData id 
+              JOIN itemDataValues iv ON id.valueID = iv.valueID 
+              JOIN fields f ON id.fieldID = f.fieldID 
+              WHERE id.itemID = i.itemID AND f.fieldName = 'title') as title
+      FROM deletedItems d
+      JOIN items i ON d.itemID = i.itemID
+      JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+      ORDER BY d.dateDeleted DESC
+    `);
+  }
+
+  /**
+   * Get count of items in trash
+   */
+  getDeletedItemsCount(): number {
+    const result = this.queryOne('SELECT COUNT(*) as count FROM deletedItems');
+    return result?.count || 0;
+  }
+
   // ============================================
   // Collection (Directory) Operations
   // ============================================
@@ -518,6 +606,7 @@ export class ZoteroDatabase {
    * Add tag to item
    * 
    * Following Zotero's pattern: modifying item tags should update item metadata
+   * Note: itemTags.type is required (NOT NULL) - 0=user tag, 1=automatic
    */
   addTagToItem(itemID: number, tagName: string, type: number = 0): boolean {
     // Get or create tag
@@ -532,7 +621,8 @@ export class ZoteroDatabase {
       return false;
     }
     
-    this.execute('INSERT INTO itemTags (itemID, tagID) VALUES (?, ?)', [itemID, tagID]);
+    // itemTags.type is NOT NULL, must provide value
+    this.execute('INSERT INTO itemTags (itemID, tagID, type) VALUES (?, ?, ?)', [itemID, tagID, type]);
     
     // CRITICAL: Update item metadata for Zotero compatibility
     this.updateItemMetadata(itemID);
@@ -646,19 +736,27 @@ export class ZoteroDatabase {
 
   /**
    * Get item by key
+   * Optionally include deleted items
    */
-  getItemByKey(key: string): ZoteroItem | null {
-    return this.queryOne(`
-      SELECT itemID, key, itemTypeID, dateAdded, dateModified, libraryID
-      FROM items
-      WHERE key = ?
-    `, [key]);
+  getItemByKey(key: string, includeDeleted: boolean = false): ZoteroItem | null {
+    const sql = includeDeleted 
+      ? `SELECT itemID, key, itemTypeID, dateAdded, dateModified, libraryID
+         FROM items WHERE key = ?`
+      : `SELECT itemID, key, itemTypeID, dateAdded, dateModified, libraryID
+         FROM items WHERE key = ? AND itemID NOT IN (SELECT itemID FROM deletedItems)`;
+    return this.queryOne(sql, [key]);
   }
 
   /**
    * Search items by title
+   * Excludes deleted items and non-searchable types (attachments, notes)
    */
   searchItems(query: string, limit: number = 50, libraryID: number = 1): any[] {
+    // Get note and attachment type IDs dynamically
+    const noteType = this.queryOne("SELECT itemTypeID FROM itemTypes WHERE typeName = 'note'");
+    const attachType = this.queryOne("SELECT itemTypeID FROM itemTypes WHERE typeName = 'attachment'");
+    const excludeTypes = [noteType?.itemTypeID || 28, attachType?.itemTypeID || 3];
+    
     return this.queryAll(`
       SELECT DISTINCT i.itemID, i.key, i.itemTypeID, i.dateAdded, i.dateModified,
              iv.value as title
@@ -669,13 +767,16 @@ export class ZoteroDatabase {
       WHERE f.fieldName = 'title' 
         AND iv.value LIKE ?
         AND i.libraryID = ?
+        AND i.itemTypeID NOT IN (?, ?)
+        AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
       ORDER BY i.dateModified DESC
       LIMIT ?
-    `, [`%${query}%`, libraryID, limit]);
+    `, [`%${query}%`, libraryID, excludeTypes[0], excludeTypes[1], limit]);
   }
 
   /**
    * Get item details with all fields
+   * Includes isDeleted flag to indicate if item is in trash
    */
   getItemDetails(itemID: number): Record<string, any> {
     // Get item basic info
@@ -687,6 +788,11 @@ export class ZoteroDatabase {
     if (!item) {
       return {};
     }
+    
+    // Check if item is in trash
+    const deletedInfo = this.queryOne(`
+      SELECT dateDeleted FROM deletedItems WHERE itemID = ?
+    `, [itemID]);
     
     // Get all item data fields
     const fields = this.queryAll(`
@@ -710,15 +816,18 @@ export class ZoteroDatabase {
     // Get tags
     const tags = this.getItemTags(itemID);
     
-    // Get attachments
+    // Get attachments (exclude deleted attachments)
     const attachments = this.queryAll(`
       SELECT ia.itemID, ia.path, ia.contentType
       FROM itemAttachments ia
       WHERE ia.parentItemID = ?
+        AND ia.itemID NOT IN (SELECT itemID FROM deletedItems)
     `, [itemID]);
     
     const result: Record<string, any> = {
       ...item,
+      isDeleted: !!deletedInfo,
+      dateDeleted: deletedInfo?.dateDeleted || null,
       creators,
       tags,
       attachments
@@ -914,52 +1023,90 @@ export class ZoteroDatabase {
 
   /**
    * Find item by DOI
+   * Returns the most recently modified item if duplicates exist
+   * Excludes items in trash
    */
   findItemByDOI(doi: string): any | null {
     // Normalize DOI (remove common prefixes)
     const normalizedDOI = doi.replace(/^https?:\/\/doi\.org\//i, '').replace(/^doi:/i, '').trim();
     
-    const result = this.queryOne(`
+    // Find all matches, excluding deleted items
+    const allMatches = this.queryAll(`
       SELECT DISTINCT i.itemID, i.key, i.itemTypeID, i.dateAdded, i.dateModified,
              iv.value as doi
       FROM items i
       JOIN itemData id ON i.itemID = id.itemID
       JOIN itemDataValues iv ON id.valueID = iv.valueID
       JOIN fields f ON id.fieldID = f.fieldID
-      WHERE f.fieldName = 'DOI' AND LOWER(iv.value) = LOWER(?)
+      WHERE f.fieldName = 'DOI' 
+        AND LOWER(iv.value) = LOWER(?)
+        AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+      ORDER BY i.dateModified DESC
     `, [normalizedDOI]);
     
-    if (result) {
-      return this.getItemDetails(result.itemID);
+    if (allMatches.length === 0) {
+      return null;
     }
-    return null;
+    
+    const result = this.getItemDetails(allMatches[0].itemID);
+    
+    // Warn about duplicates
+    if (allMatches.length > 1) {
+      result._duplicateWarning = {
+        message: `Found ${allMatches.length} items with same DOI`,
+        duplicateItemIDs: allMatches.map((m: any) => m.itemID),
+        usingItemID: allMatches[0].itemID
+      };
+    }
+    
+    return result;
   }
 
   /**
    * Find item by ISBN
+   * Returns the most recently modified item if duplicates exist
+   * Excludes items in trash
    */
   findItemByISBN(isbn: string): any | null {
     // Normalize ISBN (remove hyphens and spaces)
     const normalizedISBN = isbn.replace(/[-\s]/g, '').trim();
     
-    const result = this.queryOne(`
+    // Find all matches, excluding deleted items
+    const allMatches = this.queryAll(`
       SELECT DISTINCT i.itemID, i.key, i.itemTypeID, i.dateAdded, i.dateModified,
              iv.value as isbn
       FROM items i
       JOIN itemData id ON i.itemID = id.itemID
       JOIN itemDataValues iv ON id.valueID = iv.valueID
       JOIN fields f ON id.fieldID = f.fieldID
-      WHERE f.fieldName = 'ISBN' AND REPLACE(REPLACE(iv.value, '-', ''), ' ', '') = ?
+      WHERE f.fieldName = 'ISBN' 
+        AND REPLACE(REPLACE(iv.value, '-', ''), ' ', '') = ?
+        AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+      ORDER BY i.dateModified DESC
     `, [normalizedISBN]);
     
-    if (result) {
-      return this.getItemDetails(result.itemID);
+    if (allMatches.length === 0) {
+      return null;
     }
-    return null;
+    
+    const result = this.getItemDetails(allMatches[0].itemID);
+    
+    // Warn about duplicates
+    if (allMatches.length > 1) {
+      result._duplicateWarning = {
+        message: `Found ${allMatches.length} items with same ISBN`,
+        duplicateItemIDs: allMatches.map((m: any) => m.itemID),
+        usingItemID: allMatches[0].itemID
+      };
+    }
+    
+    return result;
   }
 
   /**
    * Find item by any identifier (DOI, ISBN, PMID, arXiv, etc.)
+   * Returns the most recently modified item if duplicates exist
+   * Excludes items in trash
    */
   findItemByIdentifier(identifier: string, type?: string): any | null {
     const fieldMap: Record<string, string> = {
@@ -979,17 +1126,29 @@ export class ZoteroDatabase {
         return this.findItemByISBN(identifier);
       }
       
-      const result = this.queryOne(`
+      // For other identifier types, also check for duplicates (excluding deleted items)
+      const allMatches = this.queryAll(`
         SELECT DISTINCT i.itemID, i.key
         FROM items i
         JOIN itemData id ON i.itemID = id.itemID
         JOIN itemDataValues iv ON id.valueID = iv.valueID
         JOIN fields f ON id.fieldID = f.fieldID
-        WHERE f.fieldName = ? AND iv.value LIKE ?
+        WHERE f.fieldName = ? 
+          AND iv.value LIKE ?
+          AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
+        ORDER BY i.dateModified DESC
       `, [fieldName, `%${identifier}%`]);
       
-      if (result) {
-        return this.getItemDetails(result.itemID);
+      if (allMatches.length > 0) {
+        const result = this.getItemDetails(allMatches[0].itemID);
+        if (allMatches.length > 1) {
+          result._duplicateWarning = {
+            message: `Found ${allMatches.length} items with same ${fieldName}`,
+            duplicateItemIDs: allMatches.map((m: any) => m.itemID),
+            usingItemID: allMatches[0].itemID
+          };
+        }
+        return result;
       }
     }
     
@@ -1416,8 +1575,18 @@ export class ZoteroDatabase {
 
   /**
    * Find duplicate items based on title, DOI, or ISBN
+   * 
+   * Note: itemTypeID values vary by Zotero version:
+   * - attachment = 3
+   * - note = 28 (in newer versions) or 1 (in older versions)
+   * We exclude both attachments and notes from duplicate detection
    */
   findDuplicates(field: 'title' | 'doi' | 'isbn' = 'title', libraryID: number = 1): any[] {
+    // Get note and attachment type IDs dynamically
+    const noteType = this.queryOne("SELECT itemTypeID FROM itemTypes WHERE typeName = 'note'");
+    const attachType = this.queryOne("SELECT itemTypeID FROM itemTypes WHERE typeName = 'attachment'");
+    const excludeTypes = [noteType?.itemTypeID || 28, attachType?.itemTypeID || 3].join(',');
+    
     if (field === 'title') {
       // Find items with the same title
       return this.queryAll(`
@@ -1431,7 +1600,8 @@ export class ZoteroDatabase {
         JOIN fields f ON id.fieldID = f.fieldID
         WHERE f.fieldName = 'title'
           AND i.libraryID = ?
-          AND i.itemTypeID NOT IN (1, 14)  -- Exclude notes and attachments
+          AND i.itemTypeID NOT IN (${excludeTypes})
+          AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
         GROUP BY iv.value
         HAVING COUNT(*) > 1
         ORDER BY count DESC
@@ -1449,6 +1619,7 @@ export class ZoteroDatabase {
         WHERE f.fieldName = 'DOI'
           AND i.libraryID = ?
           AND iv.value != ''
+          AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
         GROUP BY LOWER(iv.value)
         HAVING COUNT(*) > 1
         ORDER BY count DESC
@@ -1466,6 +1637,7 @@ export class ZoteroDatabase {
         WHERE f.fieldName = 'ISBN'
           AND i.libraryID = ?
           AND iv.value != ''
+          AND i.itemID NOT IN (SELECT itemID FROM deletedItems)
         GROUP BY REPLACE(REPLACE(iv.value, '-', ''), ' ', '')
         HAVING COUNT(*) > 1
         ORDER BY count DESC
@@ -1686,60 +1858,116 @@ export class ZoteroDatabase {
 
   /**
    * Merge items by transferring notes and tags from source items to target
+   * Uses transaction to ensure data consistency
    */
   mergeItems(targetItemID: number, sourceItemIDs: number[]): {
     success: boolean;
     transferred: {
       notes: number;
       tags: number;
+      attachments: number;
     };
     errors: string[];
   } {
     const errors: string[] = [];
     let notesTransferred = 0;
     let tagsTransferred = 0;
+    let attachmentsTransferred = 0;
 
-    // Verify target exists
+    // Verify target exists and is not deleted
     const target = this.getItemDetails(targetItemID);
     if (!target) {
       return {
         success: false,
-        transferred: { notes: 0, tags: 0 },
+        transferred: { notes: 0, tags: 0, attachments: 0 },
         errors: ['Target item not found']
       };
     }
 
-    for (const sourceID of sourceItemIDs) {
-      if (sourceID === targetItemID) continue;
+    // Check if target is in deletedItems
+    const targetDeleted = this.queryOne('SELECT 1 FROM deletedItems WHERE itemID = ?', [targetItemID]);
+    if (targetDeleted) {
+      return {
+        success: false,
+        transferred: { notes: 0, tags: 0, attachments: 0 },
+        errors: ['Target item is in trash']
+      };
+    }
 
-      // Transfer notes
-      try {
-        const notes = this.getItemNotes(sourceID);
-        for (const note of notes) {
-          this.addItemNote(targetItemID, note.note, `[Merged] ${note.title || ''}`);
-          notesTransferred++;
+    // Use transaction for atomic operation
+    this.beginTransaction();
+    
+    try {
+      for (const sourceID of sourceItemIDs) {
+        if (sourceID === targetItemID) continue;
+
+        // Verify source exists
+        const source = this.queryOne('SELECT itemID FROM items WHERE itemID = ?', [sourceID]);
+        if (!source) {
+          errors.push(`Source item ${sourceID} not found`);
+          continue;
         }
-      } catch (error) {
-        errors.push(`Failed to transfer notes from ${sourceID}: ${error}`);
+
+        // Transfer notes
+        try {
+          const notes = this.getItemNotes(sourceID);
+          for (const note of notes) {
+            this.addItemNote(targetItemID, note.note, `[Merged] ${note.title || ''}`);
+            notesTransferred++;
+          }
+        } catch (error) {
+          errors.push(`Failed to transfer notes from ${sourceID}: ${error}`);
+        }
+
+        // Transfer tags
+        try {
+          const tags = this.getItemTags(sourceID);
+          for (const tag of tags) {
+            this.addTagToItem(targetItemID, tag.name, tag.type);
+            tagsTransferred++;
+          }
+        } catch (error) {
+          errors.push(`Failed to transfer tags from ${sourceID}: ${error}`);
+        }
+
+        // Transfer attachments (update parentItemID)
+        try {
+          const attachments = this.queryAll(`
+            SELECT itemID FROM itemAttachments WHERE parentItemID = ?
+          `, [sourceID]);
+          
+          for (const att of attachments) {
+            this.execute(`
+              UPDATE itemAttachments SET parentItemID = ? WHERE itemID = ?
+            `, [targetItemID, att.itemID]);
+            attachmentsTransferred++;
+          }
+        } catch (error) {
+          errors.push(`Failed to transfer attachments from ${sourceID}: ${error}`);
+        }
       }
 
-      // Transfer tags
-      try {
-        const tags = this.getItemTags(sourceID);
-        for (const tag of tags) {
-          this.addTagToItem(targetItemID, tag.name, tag.type);
-          tagsTransferred++;
-        }
-      } catch (error) {
-        errors.push(`Failed to transfer tags from ${sourceID}: ${error}`);
+      this.commitTransaction();
+      
+      if (!this.readonly) {
+        this.save();
       }
+    } catch (error) {
+      this.rollbackTransaction();
+      errors.push(`Transaction failed: ${error}`);
+      return {
+        success: false,
+        transferred: { notes: 0, tags: 0, attachments: 0 },
+        errors
+      };
     }
 
     return {
       success: errors.length === 0,
       transferred: {
         notes: notesTransferred,
-        tags: tagsTransferred
+        tags: tagsTransferred,
+        attachments: attachmentsTransferred
       },
       errors
     };

@@ -37,7 +37,24 @@ ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to 
 ---
 
 ## � Changelog
+### v1.1.4 (2026-02-01)
 
+🔧 **Critical Fixes - Database Compatibility**
+- ✅ Fixed duplicate query inconsistency - `findItemByDOI/ISBN` now always returns the most recently modified item
+- ✅ Fixed `itemTags.type` field - this field is NOT NULL and must be provided
+- ✅ Dynamic retrieval of `note`/`attachment` itemTypeID instead of hardcoding
+- ✅ All queries now exclude items in the `deletedItems` table
+
+🚀 **New Features**
+- ✨ Added transaction support (`beginTransaction/commitTransaction/rollbackTransaction`)
+- ✨ `mergeItems` now uses transactions to ensure data consistency
+- ✨ `mergeItems` now includes attachment transfer functionality
+- ✨ Duplicate queries now return `_duplicateWarning` information
+
+🛡️ **Security Improvements**
+- All write operations check Zotero process status first
+- Automatic database backup before modifications
+- Batch operations protected by transactions
 ### v1.1.3 (2026-02-01)
 
 🔧 **Fixes**
@@ -388,7 +405,16 @@ zotero-bridge --readonly
 ---
 
 ## 📝 Changelog
+### v1.1.5 (2026-02-01)
 
+🗑️ **Trash Recognition**
+- ✅ All query functions now correctly exclude items in `deletedItems` table
+- ✅ `getItemDetails` now includes `isDeleted` and `dateDeleted` fields
+- ✅ `findItemByDOI/ISBN/Identifier` automatically skips trashed items
+- ✅ Added `isItemDeleted()` method to check if item is in trash
+- ✅ Added `getDeletedItems()` method to get trash contents
+- ✅ Added `getDeletedItemsCount()` method to get trash item count
+- ✅ Attachment queries also exclude deleted attachments
 ### v1.1.2 (2025-02-01)
 - Updated all dependencies to latest versions
 - Fixed Zod 4.x compatibility issues
