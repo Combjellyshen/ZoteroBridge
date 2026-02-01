@@ -533,52 +533,68 @@ async function main() {
   console.error(`Database: ${db.getPath()}`);
 }
 
-// Helper function to convert Zod type to JSON Schema
-function zodToJsonSchema(zodType: z.ZodTypeAny): Record<string, any> {
-  // Unwrap optional, default, and nullable types
-  if (zodType instanceof z.ZodOptional) {
-    return zodToJsonSchema(zodType._def.innerType);
+// Helper function to convert Zod type to JSON Schema (Zod v4 compatible)
+function zodToJsonSchema(zodType: any): Record<string, any> {
+  // Get the type name from _zod property or check type directly
+  const typeName = zodType?._zod?.def?.type || zodType?.constructor?.name || '';
+  
+  // Unwrap optional types
+  if (typeName === 'optional' || zodType instanceof z.ZodOptional) {
+    const inner = zodType._zod?.def?.innerType || zodType._def?.innerType;
+    if (inner) return zodToJsonSchema(inner);
   }
-  if (zodType instanceof z.ZodDefault) {
-    return zodToJsonSchema(zodType._def.innerType);
+  
+  // Unwrap default types
+  if (typeName === 'default' || zodType instanceof z.ZodDefault) {
+    const inner = zodType._zod?.def?.innerType || zodType._def?.innerType;
+    if (inner) return zodToJsonSchema(inner);
   }
-  if (zodType instanceof z.ZodNullable) {
-    return zodToJsonSchema(zodType._def.innerType);
+  
+  // Unwrap nullable types
+  if (typeName === 'nullable' || zodType instanceof z.ZodNullable) {
+    const inner = zodType._zod?.def?.innerType || zodType._def?.innerType;
+    if (inner) return zodToJsonSchema(inner);
   }
 
   // Handle basic types
-  if (zodType instanceof z.ZodString) {
+  if (typeName === 'string' || zodType instanceof z.ZodString) {
     return { type: 'string' };
   }
-  if (zodType instanceof z.ZodNumber) {
+  if (typeName === 'number' || zodType instanceof z.ZodNumber) {
     return { type: 'number' };
   }
-  if (zodType instanceof z.ZodBoolean) {
+  if (typeName === 'boolean' || zodType instanceof z.ZodBoolean) {
     return { type: 'boolean' };
   }
 
-  // Handle enum types
-  if (zodType instanceof z.ZodEnum) {
-    return { type: 'string', enum: zodType._def.values };
+  // Handle enum types (Zod v4 uses 'entries' instead of 'values')
+  if (typeName === 'enum' || zodType instanceof z.ZodEnum) {
+    const enumValues = zodType._zod?.def?.entries 
+      || zodType._def?.values 
+      || Object.keys(zodType._zod?.def?.entries || {});
+    return { type: 'string', enum: Array.isArray(enumValues) ? enumValues : Object.keys(enumValues) };
   }
 
   // Handle array types
-  if (zodType instanceof z.ZodArray) {
-    const elementType = zodType._def.type;
-    const itemSchema = zodToJsonSchema(elementType);
-    if (Object.keys(itemSchema).length === 0) {
-      return { type: 'array', items: { type: 'string' } };
+  if (typeName === 'array' || zodType instanceof z.ZodArray) {
+    const elementType = zodType._zod?.def?.element || zodType._def?.type;
+    if (elementType) {
+      const itemSchema = zodToJsonSchema(elementType);
+      if (Object.keys(itemSchema).length === 0) {
+        return { type: 'array', items: { type: 'string' } };
+      }
+      return { type: 'array', items: itemSchema };
     }
-    return { type: 'array', items: itemSchema };
+    return { type: 'array', items: { type: 'string' } };
   }
 
   // Handle object types
-  if (zodType instanceof z.ZodObject) {
+  if (typeName === 'object' || zodType instanceof z.ZodObject) {
     return { type: 'object' };
   }
 
   // Handle ZodAny
-  if (zodType instanceof z.ZodAny) {
+  if (typeName === 'any' || zodType instanceof z.ZodAny) {
     return {};
   }
 

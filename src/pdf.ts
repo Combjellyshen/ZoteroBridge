@@ -8,8 +8,9 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-// @ts-ignore - pdf-parse doesn't have type definitions
-import pdfParse from 'pdf-parse';
+// pdf-parse v2.x uses named export
+import * as pdfParseModule from 'pdf-parse';
+const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 import { ZoteroDatabase } from './database.js';
 
 export interface PDFContent {
