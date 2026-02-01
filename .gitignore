@@ -26,6 +26,7 @@ npm-debug.log*
 
 # Testing
 coverage/
+test/
 
 # Package lock (optional - uncomment if you want to include it)
 # package-lock.json
@@ -34,8 +35,24 @@ coverage/
 *.sqlite
 *.sqlite-journal
 
-# MCP Registry tokens (sensitive)
+# ========================================
+# SECURITY: Sensitive files - NEVER COMMIT
+# ========================================
 .mcpregistry_*
+.mcpregistry_github_token
+.mcpregistry_registry_token
 mcp-publisher.exe
+mcp-publisher
 
-test/
+# API keys and tokens
+*.key
+*.pem
+*_token
+*_secret
+secrets.json
+credentials.json
+
+# Temp files
+*.tgz
+*.tar.gz
+temp-*

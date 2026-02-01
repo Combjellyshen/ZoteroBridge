@@ -31,10 +31,27 @@ test/
 *.sqlite
 *.sqlite-journal
 
-# MCP Registry tokens (SENSITIVE - NEVER PUBLISH)
+# ========================================
+# SECURITY: Sensitive files - NEVER PUBLISH
+# ========================================
 .mcpregistry_*
+.mcpregistry_github_token
+.mcpregistry_registry_token
 mcp-publisher.exe
 mcp-publisher
+
+# API keys and tokens
+*.key
+*.pem
+*_token
+*_secret
+secrets.json
+credentials.json
+
+# Git files
+.git/
+.gitignore
+.gitattributes
 
 # Lock files
 package-lock.json
@@ -42,3 +59,4 @@ package-lock.json
 # Temp files
 *.tgz
 *.tar.gz
+temp-*
