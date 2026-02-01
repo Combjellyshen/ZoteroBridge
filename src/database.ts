@@ -10,9 +10,10 @@
  */
 
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { execSync } from 'child_process';
 
 export interface ZoteroItem {
   itemID: number;
@@ -48,6 +49,8 @@ export class ZoteroDatabase {
   private dbPath: string;
   private readonly: boolean;
   private SQL: any = null;
+  private backupPath: string | null = null;
+  private hasUnsavedChanges: boolean = false;
 
   constructor(dbPath?: string, readonly: boolean = false) {
     this.dbPath = dbPath || this.findDefaultZoteroDB();
@@ -95,6 +98,58 @@ export class ZoteroDatabase {
   }
 
   /**
+   * Check if Zotero is currently running
+   */
+  private isZoteroRunning(): boolean {
+    try {
+      if (process.platform === 'win32') {
+        const result = execSync('tasklist /FI "IMAGENAME eq zotero.exe" /NH', { encoding: 'utf8' });
+        return result.toLowerCase().includes('zotero.exe');
+      } else if (process.platform === 'darwin') {
+        const result = execSync('pgrep -x Zotero', { encoding: 'utf8' });
+        return result.trim().length > 0;
+      } else {
+        const result = execSync('pgrep -x zotero', { encoding: 'utf8' });
+        return result.trim().length > 0;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if WAL files exist (indicates active Zotero session)
+   */
+  private hasWALFiles(): boolean {
+    const walPath = this.dbPath + '-wal';
+    const shmPath = this.dbPath + '-shm';
+    return existsSync(walPath) || existsSync(shmPath);
+  }
+
+  /**
+   * Create a backup of the database before modification
+   */
+  private createBackup(): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = this.dbPath.replace('.sqlite', `.backup-${timestamp}.sqlite`);
+    copyFileSync(this.dbPath, backupPath);
+    return backupPath;
+  }
+
+  /**
+   * Verify database integrity
+   */
+  private verifyIntegrity(): boolean {
+    if (!this.db) return false;
+    try {
+      const result = this.queryOne('PRAGMA integrity_check');
+      return result && result.integrity_check === 'ok';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Connect to the Zotero database
    */
   async connect(): Promise<void> {
@@ -104,6 +159,18 @@ export class ZoteroDatabase {
 
     if (!existsSync(this.dbPath)) {
       throw new Error(`Zotero database not found at: ${this.dbPath}`);
+    }
+
+    // WARNING: Check if Zotero is running (write operations are dangerous)
+    if (!this.readonly && this.isZoteroRunning()) {
+      console.warn('⚠️  WARNING: Zotero is currently running. Write operations may corrupt the database!');
+      console.warn('   Please close Zotero before making changes, or use readonly mode.');
+    }
+
+    // WARNING: Check for WAL files
+    if (!this.readonly && this.hasWALFiles()) {
+      console.warn('⚠️  WARNING: WAL files detected. Zotero may be running or was not closed properly.');
+      console.warn('   Writing to the database may cause corruption!');
     }
 
     // Initialize sql.js
@@ -116,19 +183,54 @@ export class ZoteroDatabase {
 
     // Enable foreign keys
     db.run('PRAGMA foreign_keys = ON');
+
+    // Verify database integrity on connect
+    if (!this.verifyIntegrity()) {
+      console.error('❌ ERROR: Database integrity check failed! The database may already be corrupted.');
+    }
   }
 
   /**
    * Save changes to the database file
+   * WARNING: This can corrupt the database if Zotero is running!
    */
   save(): void {
-    if (!this.db || this.readonly) {
+    if (!this.db || this.readonly || !this.hasUnsavedChanges) {
       return;
+    }
+
+    // Safety check before save
+    if (this.isZoteroRunning()) {
+      throw new Error('Cannot save: Zotero is currently running. Please close Zotero first to avoid database corruption.');
+    }
+
+    if (this.hasWALFiles()) {
+      throw new Error('Cannot save: WAL files detected. Please close Zotero and wait for WAL files to be cleaned up.');
+    }
+
+    // Create backup before saving
+    if (!this.backupPath) {
+      this.backupPath = this.createBackup();
+      console.log(`📁 Backup created at: ${this.backupPath}`);
+    }
+
+    // Verify integrity before save
+    if (!this.verifyIntegrity()) {
+      throw new Error('Cannot save: Database integrity check failed. Rolling back to backup.');
     }
     
     const data = this.db.export();
     const buffer = Buffer.from(data);
     writeFileSync(this.dbPath, buffer);
+    this.hasUnsavedChanges = false;
+    console.log('✅ Database saved successfully.');
+  }
+
+  /**
+   * Mark that changes have been made (for tracking unsaved changes)
+   */
+  private markDirty(): void {
+    this.hasUnsavedChanges = true;
   }
 
   /**
@@ -136,8 +238,12 @@ export class ZoteroDatabase {
    */
   disconnect(): void {
     if (this.db) {
-      if (!this.readonly) {
-        this.save();
+      if (!this.readonly && this.hasUnsavedChanges) {
+        try {
+          this.save();
+        } catch (e) {
+          console.error('Failed to save on disconnect:', e);
+        }
       }
       this.db.close();
       this.db = null;
@@ -198,7 +304,13 @@ export class ZoteroDatabase {
       throw new Error('Database not connected');
     }
     
+    // Safety check before modifying database
+    if (this.isZoteroRunning()) {
+      throw new Error('Cannot modify database: Zotero is currently running. Please close Zotero first.');
+    }
+    
     this.db.run(sql, params);
+    this.markDirty(); // Mark that we have unsaved changes
     
     const changes = this.db.getRowsModified();
     const lastId = this.queryOne('SELECT last_insert_rowid() as id');
