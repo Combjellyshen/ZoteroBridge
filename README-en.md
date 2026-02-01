@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/zotero-bridge"><img src="https://img.shields.io/npm/v/zotero-bridge" alt="npm version"></a>
   <a href="https://www.zotero.org/"><img src="https://img.shields.io/badge/Zotero-7.0+-red" alt="Zotero"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-18+-green" alt="Node.js"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0+-blue" alt="TypeScript"></a>
@@ -20,15 +21,18 @@
 
 ## 📚 Overview
 
-ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to Zotero's SQLite database (`zotero.sqlite`), enabling AI assistants (like Claude, ChatGPT, etc.) to interact with your Zotero reference library.
+ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to Zotero''s SQLite database (`zotero.sqlite`), enabling AI assistants (like Claude, ChatGPT, GitHub Copilot, etc.) to interact with your Zotero reference library.
 
 ### ✨ Key Features
 
 - 🗂️ **Collection Management** - Create, rename, move, and delete Zotero collections (folders)
 - 🏷️ **Tag Management** - Add, remove, and query tags for references
 - 📖 **Item Operations** - Search items, get details, manage collection relationships
-- 📝 **Abstract Management** - Read and set item abstracts, add notes
-- 📄 **PDF Processing** - Extract PDF full text, generate summaries, full-text search
+- 📝 **Content Management** - Read/set abstracts, add notes
+- 📄 **PDF Processing** - Extract full text, generate summaries, full-text search, get annotations
+- 🔍 **Identifier Search** - Find items by DOI, ISBN, PMID, arXiv, URL
+- 🔗 **Related Items** - Find similar items by manual links, shared tags/creators
+- 🛠️ **Library Maintenance** - Find duplicates, validate attachments, cleanup orphans, merge items
 
 ---
 
@@ -38,9 +42,17 @@ ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to 
 
 - Node.js 18.0 or higher
 - Zotero 7.0 or higher
-- An MCP-compatible AI client (e.g., Claude Desktop, Cursor)
+- An MCP-compatible AI client (e.g., Claude Desktop, Cursor, VS Code Copilot)
 
 ### Installation
+
+#### Option 1: Install via npm (Recommended)
+
+```bash
+npm install -g zotero-bridge
+```
+
+#### Option 2: Build from Source
 
 ```bash
 # Clone the repository
@@ -67,6 +79,20 @@ Add to your Claude Desktop configuration file:
 {
   "mcpServers": {
     "zotero-bridge": {
+      "command": "npx",
+      "args": ["-y", "zotero-bridge"],
+      "env": {}
+    }
+  }
+}
+```
+
+If building from source:
+
+```json
+{
+  "mcpServers": {
+    "zotero-bridge": {
       "command": "node",
       "args": ["path/to/ZoteroBridge/dist/index.js"],
       "env": {}
@@ -83,8 +109,8 @@ Create `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "zotero-bridge": {
-      "command": "node",
-      "args": ["path/to/ZoteroBridge/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "zotero-bridge"]
     }
   }
 }
@@ -92,20 +118,19 @@ Create `.cursor/mcp.json` in your project root:
 
 #### VS Code Copilot
 
-1. Open VS Code Settings (`Ctrl+,`).
-2. Search for `github.copilot.chat.mcpServers`.
-3. Click "Edit in settings.json".
+1. Open VS Code Settings (`Ctrl+,`)
+2. Search for `github.copilot.chat.mcpServers`
+3. Click "Edit in settings.json"
 4. Add the following configuration:
 
 ```json
 "github.copilot.chat.mcpServers": {
   "zotero-bridge": {
-    "command": "node",
-    "args": ["path/to/ZoteroBridge/dist/index.js"]
+    "command": "npx",
+    "args": ["-y", "zotero-bridge"]
   }
 }
 ```
-Make sure to replace `path/to/ZoteroBridge/dist/index.js` with the actual absolute path.
 
 #### Custom Database Path
 
@@ -115,11 +140,8 @@ If your Zotero database is not in the default location:
 {
   "mcpServers": {
     "zotero-bridge": {
-      "command": "node",
-      "args": [
-        "path/to/ZoteroBridge/dist/index.js",
-        "--db", "D:/MyZotero/zotero.sqlite"
-      ]
+      "command": "npx",
+      "args": ["-y", "zotero-bridge", "--db", "D:/MyZotero/zotero.sqlite"]
     }
   }
 }
@@ -127,122 +149,154 @@ If your Zotero database is not in the default location:
 
 ---
 
-## 🛠️ Available Tools
+## 🛠️ Available Tools (13 Consolidated Tools)
 
-### Collection Management
+> Version 1.1.0+ consolidates the original 42 tools into 13 action-based tools, simplifying the interface while maintaining full functionality.
 
-| Tool | Description |
-|------|-------------|
-| `list_collections` | List all collections |
-| `get_collection` | Get collection details |
-| `create_collection` | Create a new collection |
-| `rename_collection` | Rename a collection |
-| `move_collection` | Move collection to new parent |
-| `delete_collection` | Delete a collection |
+### manage_collection - Collection Management
+
+All operations for managing Zotero collections (folders).
+
+| Action | Description |
+|--------|-------------|
+| `list` | List all collections |
+| `get` | Get collection details |
+| `create` | Create a new collection |
+| `rename` | Rename a collection |
+| `move` | Move collection to new parent |
+| `delete` | Delete a collection |
 | `get_subcollections` | Get subcollections |
+| `add_item` | Add item to collection |
+| `remove_item` | Remove item from collection |
+| `get_items` | Get all items in collection |
 
-### Tag Management
+### manage_tags - Tag Management
 
-| Tool | Description |
-|------|-------------|
-| `list_tags` | List all tags |
-| `create_tag` | Create a new tag |
-| `add_tag` | Add a tag to an item |
-| `remove_tag` | Remove a tag from an item |
+All operations for managing tags.
+
+| Action | Description |
+|--------|-------------|
+| `list` | List all tags |
 | `get_item_tags` | Get all tags for an item |
+| `add` | Add tag to an item |
+| `remove` | Remove tag from an item |
+| `create` | Create a new tag |
 
-### Item Operations
+### search_items - Search Items
 
-| Tool | Description |
+Search Zotero items by title.
+
+### get_item_details - Get Item Details
+
+Get detailed information about an item by ID or key.
+
+### manage_item_content - Content Management
+
+Manage item abstracts and notes.
+
+| Action | Description |
+|--------|-------------|
+| `get_abstract` | Get item abstract |
+| `set_abstract` | Set item abstract |
+| `get_notes` | Get item notes |
+| `add_note` | Add a note to item |
+
+### manage_pdf - PDF Operations
+
+Various operations for PDF files.
+
+| Action | Description |
+|--------|-------------|
+| `extract_text` | Extract full text from PDF |
+| `get_summary` | Get PDF summary information |
+| `list` | Get PDF attachments for an item |
+| `search` | Search text within PDF |
+| `generate_abstract` | Generate abstract from PDF content |
+
+### find_by_identifier - Identifier Search
+
+Find items by various identifiers with auto-detection support.
+
+| Type | Description |
 |------|-------------|
-| `search_items` | Search items by title |
-| `get_item_details` | Get detailed item information |
-| `add_item_to_collection` | Add item to a collection |
-| `remove_item_from_collection` | Remove item from a collection |
-| `get_collection_items` | Get all items in a collection |
+| `doi` | Find by DOI |
+| `isbn` | Find by ISBN |
+| `pmid` | Find by PubMed ID |
+| `arxiv` | Find by arXiv ID |
+| `url` | Find by URL |
+| `auto` | Auto-detect identifier type |
 
-### Abstract and Notes
+### get_annotations - Get Annotations
 
-| Tool | Description |
-|------|-------------|
-| `get_item_abstract` | Get item abstract |
-| `set_item_abstract` | Set item abstract |
-| `get_item_notes` | Get item notes |
-| `add_item_note` | Add a note to an item |
+Get PDF annotations (highlights, notes, etc.) with optional filters by type, color, or search query.
 
-### PDF Processing
+### search_fulltext - Full-text Search
 
-| Tool | Description |
-|------|-------------|
-| `extract_pdf_text` | Extract full text from PDF |
-| `get_pdf_summary` | Get PDF summary information |
-| `get_item_pdfs` | Get PDF attachments for an item |
-| `search_pdf` | Search text within a PDF |
-| `generate_abstract_from_pdf` | Generate abstract from PDF content |
+Search in Zotero''s full-text index or get full-text content of an attachment.
 
-### Utilities
+### find_related_items - Find Related Items
 
-| Tool | Description |
-|------|-------------|
-| `get_database_info` | Get database information |
-| `raw_query` | Execute raw SQL query (SELECT only) |
+Find related items through multiple methods.
 
-### Identifier Search (DOI/ISBN)
+| Method | Description |
+|--------|-------------|
+| `manual` | Get manually linked items |
+| `tags` | Find by shared tags |
+| `creators` | Find by shared authors |
+| `collection` | Find in same collection |
+| `all` | Use all methods |
 
-| Tool | Description |
-|------|-------------|
-| `find_by_doi` | Find item by DOI |
-| `find_by_isbn` | Find item by ISBN |
-| `find_by_identifier` | Find item by any identifier (DOI, ISBN, PMID, arXiv) |
+### get_database_info - Database Info
 
-### PDF Annotations
+Get Zotero database information (path, storage, statistics).
 
-| Tool | Description |
-|------|-------------|
-| `get_item_annotations` | Get all annotations for an item (highlights, notes, etc.) |
-| `get_attachment_annotations` | Get annotations from a specific attachment |
-| `get_annotations_by_type` | Filter annotations by type (highlight, note, etc.) |
-| `get_annotations_by_color` | Filter annotations by color |
-| `search_annotations` | Search within annotation content |
+### raw_query - Raw SQL Query
 
-### Fulltext Search
+Execute raw SQL queries (SELECT only, read-only).
 
-| Tool | Description |
-|------|-------------|
-| `search_fulltext` | Search in fulltext index |
-| `get_fulltext_content` | Get fulltext content of an attachment |
-| `search_fulltext_with_context` | Fulltext search with context snippets |
+### library_maintenance - Library Maintenance 🆕
 
-### Related Items
+Tools for maintaining and cleaning up your Zotero library.
 
-| Tool | Description |
-|------|-------------|
-| `get_related_items` | Get manually linked related items |
-| `find_similar_by_tags` | Find similar items by shared tags |
-| `find_similar_by_creators` | Find similar items by shared authors |
-| `find_similar_by_collection` | Find similar items in same collection |
+| Action | Description |
+|--------|-------------|
+| `find_duplicates` | Find duplicate items (by title, DOI, or ISBN) |
+| `validate_attachments` | Validate if attachment files exist |
+| `get_valid_attachment` | Get valid attachment for an item |
+| `find_with_valid_pdf` | Find items with valid PDFs |
+| `cleanup_orphans` | Cleanup orphan attachment records (supports dry-run) |
+| `merge_items` | Merge duplicate items |
 
 ---
 
 ## 📖 Usage Examples
 
-### Using with Claude
+### Using with Claude/Copilot
 
 ```
-# List all collections
-List all collections in my Zotero library
-
-# Create a new collection
-Create a new collection called "Machine Learning Papers"
-
 # Search items
 Search for items with "deep learning" in the title
 
-# Extract PDF content
-Extract the full text from this item's PDF and generate a summary
+# Get details
+Get detailed information for item ID 1234
 
-# Add tags
-Add "important" and "to-read" tags to this item
+# Manage collections
+Create a new collection called "Machine Learning Papers"
+Add item 1234 to collection 5678
+
+# PDF operations
+Extract full text from attachment ID 100
+Search for "neural network" in this PDF
+
+# Find by DOI
+Find the item with DOI 10.1126/science.aaa2397
+
+# Get annotations
+Get all highlight annotations for item 1234
+
+# Library maintenance
+Find duplicate items in my library
+Check if attachments for item 1234 are valid
 ```
 
 ---
@@ -255,8 +309,9 @@ ZoteroBridge/
 │   ├── index.ts      # MCP server entry point
 │   ├── database.ts   # Zotero SQLite database operations
 │   ├── pdf.ts        # PDF processing module
-│   └── tools.ts      # MCP tool definitions
+│   └── tools.ts      # MCP tool definitions (13 consolidated tools)
 ├── dist/             # Compiled output
+├── test/             # Test files
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -283,13 +338,13 @@ npm run build
 
 ```bash
 # Show help
-node dist/index.js --help
+zotero-bridge --help
 
 # Specify database path
-node dist/index.js --db /path/to/zotero.sqlite
+zotero-bridge --db /path/to/zotero.sqlite
 
 # Read-only mode
-node dist/index.js --readonly
+zotero-bridge --readonly
 ```
 
 ---
@@ -299,6 +354,23 @@ node dist/index.js --readonly
 1. **Close Zotero**: When using write features, close the Zotero client to avoid database locking
 2. **Backup Data**: Backup `zotero.sqlite` before making modifications
 3. **Read-only Mode**: Use `--readonly` flag when only reading data for safety
+4. **Attachment Validation**: Use `library_maintenance` with `validate_attachments` to check if files exist
+
+---
+
+## 📝 Changelog
+
+### v1.1.2 (2025-02-01)
+- Updated all dependencies to latest versions
+- Fixed Zod 4.x compatibility issues
+- Fixed pdf-parse 2.x ESM import issues
+
+### v1.1.1 (2025-02-01)
+- Consolidated 42 tools into 13 action-based tools
+- Added `library_maintenance` tool (duplicate detection, attachment validation, orphan cleanup, item merging)
+
+### v1.1.0
+- Initial consolidated version
 
 ---
 
@@ -320,5 +392,6 @@ This project is licensed under the [MIT License](LICENSE).
 
 - Author: Combjellyshen
 - GitHub: [https://github.com/Combjellyshen/ZoteroBridge](https://github.com/Combjellyshen/ZoteroBridge)
+- npm: [https://www.npmjs.com/package/zotero-bridge](https://www.npmjs.com/package/zotero-bridge)
 
 Feel free to submit Issues or Pull Requests!
