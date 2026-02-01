@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output (keep dist for npm)
+# dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Testing
+coverage/
+test/
+
+# Zotero database files (for security)
+*.sqlite
+*.sqlite-journal
+
+# MCP Registry tokens (SENSITIVE - NEVER PUBLISH)
+.mcpregistry_*
+mcp-publisher.exe
+mcp-publisher
+
+# Lock files
+package-lock.json
+
+# Temp files
+*.tgz
+*.tar.gz
