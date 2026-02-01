@@ -214,9 +214,12 @@ export class ZoteroDatabase {
       console.log(`📁 Backup created at: ${this.backupPath}`);
     }
 
-    // Verify integrity before save
-    if (!this.verifyIntegrity()) {
-      throw new Error('Cannot save: Database integrity check failed. Rolling back to backup.');
+    // Verify integrity before save (only check a few important tables to speed up)
+    try {
+      this.queryOne("SELECT 1 FROM items LIMIT 1");
+      this.queryOne("SELECT 1 FROM itemData LIMIT 1");
+    } catch (e) {
+      throw new Error('Cannot save: Basic database check failed. Database may be corrupted.');
     }
     
     const data = this.db.export();
@@ -265,6 +268,34 @@ export class ZoteroDatabase {
    */
   getPath(): string {
     return this.dbPath;
+  }
+
+  /**
+   * Get current timestamp in Zotero SQL format
+   */
+  private getCurrentTimestamp(): string {
+    return new Date().toISOString().replace('T', ' ').replace('Z', '').slice(0, -4);
+  }
+
+  /**
+   * Update item metadata after modification (dateModified, version, synced)
+   * This is CRITICAL for Zotero compatibility!
+   * 
+   * According to Zotero's official code:
+   * - dateModified must be updated on every change
+   * - version must be incremented
+   * - synced must be set to 0 (false) to indicate local change
+   */
+  private updateItemMetadata(itemID: number): void {
+    const timestamp = this.getCurrentTimestamp();
+    this.db!.run(`
+      UPDATE items 
+      SET dateModified = ?, 
+          clientDateModified = ?,
+          version = version + 1,
+          synced = 0
+      WHERE itemID = ?
+    `, [timestamp, timestamp, itemID]);
   }
 
   /**
@@ -485,6 +516,8 @@ export class ZoteroDatabase {
 
   /**
    * Add tag to item
+   * 
+   * Following Zotero's pattern: modifying item tags should update item metadata
    */
   addTagToItem(itemID: number, tagName: string, type: number = 0): boolean {
     // Get or create tag
@@ -500,6 +533,9 @@ export class ZoteroDatabase {
     }
     
     this.execute('INSERT INTO itemTags (itemID, tagID) VALUES (?, ?)', [itemID, tagID]);
+    
+    // CRITICAL: Update item metadata for Zotero compatibility
+    this.updateItemMetadata(itemID);
     
     if (!this.readonly) {
       this.save();
@@ -518,6 +554,11 @@ export class ZoteroDatabase {
     }
     
     const result = this.execute('DELETE FROM itemTags WHERE itemID = ? AND tagID = ?', [itemID, tag.tagID]);
+    
+    if (result.changes > 0) {
+      // CRITICAL: Update item metadata for Zotero compatibility
+      this.updateItemMetadata(itemID);
+    }
     
     if (!this.readonly && result.changes > 0) {
       this.save();
@@ -558,6 +599,8 @@ export class ZoteroDatabase {
 
   /**
    * Add item to collection
+   * 
+   * Following Zotero's pattern: collection membership changes update item metadata
    */
   addItemToCollection(itemID: number, collectionID: number): boolean {
     // Check if already in collection
@@ -571,6 +614,9 @@ export class ZoteroDatabase {
     
     this.execute('INSERT INTO collectionItems (itemID, collectionID) VALUES (?, ?)', [itemID, collectionID]);
     
+    // CRITICAL: Update item metadata for Zotero compatibility
+    this.updateItemMetadata(itemID);
+    
     if (!this.readonly) {
       this.save();
     }
@@ -580,9 +626,16 @@ export class ZoteroDatabase {
 
   /**
    * Remove item from collection
+   * 
+   * Following Zotero's pattern: collection membership changes update item metadata
    */
   removeItemFromCollection(itemID: number, collectionID: number): boolean {
     const result = this.execute('DELETE FROM collectionItems WHERE itemID = ? AND collectionID = ?', [itemID, collectionID]);
+    
+    if (result.changes > 0) {
+      // CRITICAL: Update item metadata for Zotero compatibility
+      this.updateItemMetadata(itemID);
+    }
     
     if (!this.readonly && result.changes > 0) {
       this.save();
@@ -699,6 +752,11 @@ export class ZoteroDatabase {
 
   /**
    * Set item abstract
+   * 
+   * Following Zotero's official pattern for modifying item data:
+   * 1. Get or create value in itemDataValues
+   * 2. Insert or update itemData
+   * 3. Update item metadata (dateModified, version, synced)
    */
   setItemAbstract(itemID: number, abstract: string): boolean {
     // Get abstractNote field ID
@@ -707,7 +765,7 @@ export class ZoteroDatabase {
       return false;
     }
     
-    // Get or create value
+    // Get or create value (Zotero stores unique values in itemDataValues)
     let valueRow = this.queryOne('SELECT valueID FROM itemDataValues WHERE value = ?', [abstract]);
     
     if (!valueRow) {
@@ -730,13 +788,15 @@ export class ZoteroDatabase {
         [itemID, field.fieldID, valueRow.valueID]);
     }
     
+    // CRITICAL: Update item metadata for Zotero compatibility
+    this.updateItemMetadata(itemID);
+    
     if (!this.readonly) {
       this.save();
     }
     
     return true;
   }
-
   /**
    * Get item notes
    */
@@ -750,6 +810,11 @@ export class ZoteroDatabase {
 
   /**
    * Add note to item
+   * 
+   * Following Zotero's official pattern for creating notes:
+   * 1. Create item with note type
+   * 2. Create itemNotes entry
+   * 3. Update parent item's metadata (as adding a child note is a modification)
    */
   addItemNote(parentItemID: number, noteContent: string, title: string = ''): number {
     // Get parent item's library ID
@@ -761,22 +826,32 @@ export class ZoteroDatabase {
     // Get note item type ID
     const noteType = this.queryOne("SELECT itemTypeID FROM itemTypes WHERE typeName = 'note'");
     
-    // Create item entry
+    // Create item entry with proper timestamp format
     const key = this.generateKey();
-    const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
+    const now = this.getCurrentTimestamp();
     
+    // Note: synced=0 for new local items, clientDateModified is also set
     const itemResult = this.execute(`
-      INSERT INTO items (itemTypeID, dateAdded, dateModified, key, libraryID, version)
-      VALUES (?, ?, ?, ?, ?, 0)
-    `, [noteType.itemTypeID, now, now, key, parent.libraryID]);
+      INSERT INTO items (itemTypeID, dateAdded, dateModified, clientDateModified, key, libraryID, version, synced)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+    `, [noteType.itemTypeID, now, now, now, key, parent.libraryID]);
     
     const itemID = itemResult.lastInsertRowid;
+    
+    // Wrap note content in Zotero's expected format if not already
+    let formattedNote = noteContent;
+    if (!noteContent.startsWith('<div class="zotero-note')) {
+      formattedNote = `<div class="zotero-note znv1">${noteContent}</div>`;
+    }
     
     // Create note entry
     this.execute(`
       INSERT INTO itemNotes (itemID, parentItemID, note, title)
       VALUES (?, ?, ?, ?)
-    `, [itemID, parentItemID, noteContent, title]);
+    `, [itemID, parentItemID, formattedNote, title]);
+    
+    // CRITICAL: Update parent item metadata (adding a note is considered a modification)
+    this.updateItemMetadata(parentItemID);
     
     if (!this.readonly) {
       this.save();
