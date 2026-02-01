@@ -1,5 +1,9 @@
 # ZoteroBridge
 
+<p align="right">
+  <a href="README.md">简体中文</a> | <a href="README-en.md">English</a>
+</p>
+
 <p align="center">
   <b>Model Context Protocol (MCP) Server for Zotero SQLite Database</b>
 </p>
