@@ -112,6 +112,7 @@ async function main() {
 
   // Initialize database
   const db = new ZoteroDatabase(dbPath, readonly);
+  await db.connect(); // Connect to database
   const pdf = new PDFProcessor(db);
 
   // Create MCP server
@@ -138,8 +139,9 @@ async function main() {
           properties: Object.fromEntries(
             Object.entries(tool.inputSchema.shape || {}).map(([key, value]) => {
               const zodType = value as z.ZodTypeAny;
+              const schema = zodToJsonSchema(zodType);
               return [key, {
-                type: getZodType(zodType),
+                ...schema,
                 description: zodType.description || ''
               }];
             })
@@ -567,17 +569,59 @@ async function main() {
   console.error(`Database: ${db.getPath()}`);
 }
 
-// Helper function to get Zod type as JSON Schema type
-function getZodType(zodType: z.ZodTypeAny): string {
-  if (zodType instanceof z.ZodString) return 'string';
-  if (zodType instanceof z.ZodNumber) return 'number';
-  if (zodType instanceof z.ZodBoolean) return 'boolean';
-  if (zodType instanceof z.ZodArray) return 'array';
-  if (zodType instanceof z.ZodObject) return 'object';
-  if (zodType instanceof z.ZodOptional) return getZodType(zodType._def.innerType);
-  if (zodType instanceof z.ZodDefault) return getZodType(zodType._def.innerType);
-  if (zodType instanceof z.ZodNullable) return getZodType(zodType._def.innerType);
-  return 'string';
+// Helper function to convert Zod type to JSON Schema
+function zodToJsonSchema(zodType: z.ZodTypeAny): Record<string, any> {
+  // Unwrap optional, default, and nullable types
+  if (zodType instanceof z.ZodOptional) {
+    return zodToJsonSchema(zodType._def.innerType);
+  }
+  if (zodType instanceof z.ZodDefault) {
+    return zodToJsonSchema(zodType._def.innerType);
+  }
+  if (zodType instanceof z.ZodNullable) {
+    return zodToJsonSchema(zodType._def.innerType);
+  }
+
+  // Handle basic types
+  if (zodType instanceof z.ZodString) {
+    return { type: 'string' };
+  }
+  if (zodType instanceof z.ZodNumber) {
+    return { type: 'number' };
+  }
+  if (zodType instanceof z.ZodBoolean) {
+    return { type: 'boolean' };
+  }
+
+  // Handle array types - MUST include items
+  if (zodType instanceof z.ZodArray) {
+    const elementType = zodType._def.type;
+    const itemSchema = zodToJsonSchema(elementType);
+    // If items schema is empty (from ZodAny), use a more explicit schema
+    if (Object.keys(itemSchema).length === 0) {
+      return {
+        type: 'array',
+        items: { type: 'string' } // Default to string for any type to ensure valid JSON Schema
+      };
+    }
+    return {
+      type: 'array',
+      items: itemSchema
+    };
+  }
+
+  // Handle object types
+  if (zodType instanceof z.ZodObject) {
+    return { type: 'object' };
+  }
+
+  // Handle ZodAny - return empty object (accepts any value)
+  if (zodType instanceof z.ZodAny) {
+    return {};
+  }
+
+  // Default to string
+  return { type: 'string' };
 }
 
 main().catch((error) => {

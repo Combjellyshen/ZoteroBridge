@@ -90,6 +90,23 @@ Create `.cursor/mcp.json` in your project root:
 }
 ```
 
+#### VS Code Copilot
+
+1. Open VS Code Settings (`Ctrl+,`).
+2. Search for `github.copilot.chat.mcpServers`.
+3. Click "Edit in settings.json".
+4. Add the following configuration:
+
+```json
+"github.copilot.chat.mcpServers": {
+  "zotero-bridge": {
+    "command": "node",
+    "args": ["path/to/ZoteroBridge/dist/index.js"]
+  }
+}
+```
+Make sure to replace `path/to/ZoteroBridge/dist/index.js` with the actual absolute path.
+
 #### Custom Database Path
 
 If your Zotero database is not in the default location:

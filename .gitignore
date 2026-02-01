@@ -33,3 +33,5 @@ coverage/
 # Zotero database files (for security)
 *.sqlite
 *.sqlite-journal
+
+test/

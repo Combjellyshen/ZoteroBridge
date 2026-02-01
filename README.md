@@ -90,6 +90,23 @@ npm run build
 }
 ```
 
+#### VS Code Copilot
+
+1. 打开 VS Code 设置 (`Ctrl+,`)。
+2. 搜索 `github.copilot.chat.mcpServers`。
+3. 点击 "在 settings.json 中编辑"。
+4. 添加以下配置：
+
+```json
+"github.copilot.chat.mcpServers": {
+  "zotero-bridge": {
+    "command": "node",
+    "args": ["path/to/ZoteroBridge/dist/index.js"]
+  }
+}
+```
+确保将 `path/to/ZoteroBridge/dist/index.js` 替换为这一文件的实际绝对路径。
+
 #### 自定义数据库路径
 
 如果你的 Zotero 数据库不在默认位置，可以指定路径：
