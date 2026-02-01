@@ -409,8 +409,8 @@ export class ZoteroDatabase {
     const key = this.generateKey();
     
     const result = this.execute(`
-      INSERT INTO collections (collectionName, parentCollectionID, libraryID, key, version)
-      VALUES (?, ?, ?, ?, 0)
+      INSERT INTO collections (collectionName, parentCollectionID, libraryID, key, version, clientDateModified)
+      VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
     `, [name, parentCollectionID, libraryID, key]);
     
     if (!this.readonly) {
@@ -426,7 +426,7 @@ export class ZoteroDatabase {
   renameCollection(collectionID: number, newName: string): boolean {
     const result = this.execute(`
       UPDATE collections
-      SET collectionName = ?, version = version + 1
+      SET collectionName = ?, version = version + 1, clientDateModified = CURRENT_TIMESTAMP
       WHERE collectionID = ?
     `, [newName, collectionID]);
     
@@ -443,7 +443,7 @@ export class ZoteroDatabase {
   moveCollection(collectionID: number, newParentID: number | null): boolean {
     const result = this.execute(`
       UPDATE collections
-      SET parentCollectionID = ?, version = version + 1
+      SET parentCollectionID = ?, version = version + 1, clientDateModified = CURRENT_TIMESTAMP
       WHERE collectionID = ?
     `, [newParentID, collectionID]);
     

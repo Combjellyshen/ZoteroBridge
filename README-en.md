@@ -36,7 +36,36 @@ ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to 
 
 ---
 
-## 🚀 Quick Start
+## � Changelog
+
+### v1.1.3 (2026-02-01)
+
+🔧 **Fixes**
+- ✅ Fixed collection (folder) creation - added required `clientDateModified` field
+- ✅ Fixed collection rename - properly updates `clientDateModified` timestamp
+- ✅ Fixed collection move - ensures parent-child relationships are correctly established
+- ✅ All collection operations now fully comply with Zotero's official database schema
+
+Now working properly:
+- Create new collections (top-level folders)
+- Create subcollections (supports multi-level nesting)
+- Rename collections
+- Move collections to other parent collections
+- Get subcollection lists
+
+### v1.1.2
+
+- Improved database connection stability
+- Optimized error handling mechanisms
+
+### v1.1.0
+
+- Consolidated 42 tools into 13 action-based tools
+- Simplified interface while maintaining all functionality
+
+---
+
+## �🚀 Quick Start
 
 ### Prerequisites
 
