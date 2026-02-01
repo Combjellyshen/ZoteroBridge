@@ -1,7 +1,8 @@
 /**
- * ZoteroBridge - MCP Tool Definitions
+ * ZoteroBridge - MCP Tool Definitions (Consolidated)
  * 
  * Defines all available MCP tools for Zotero operations
+ * Tools are consolidated to reduce total count while maintaining functionality
  * 
  * @author Combjellyshen
  */
@@ -9,67 +10,30 @@
 import { z } from 'zod';
 
 // ============================================
-// Collection/Directory Tools
+// Collection Tools (Consolidated)
 // ============================================
 
-export const listCollectionsSchema = z.object({
-  libraryID: z.number().optional().default(1).describe('Library ID (default: 1 for personal library)')
-});
-
-export const getCollectionSchema = z.object({
-  collectionID: z.number().optional().describe('Collection ID'),
-  name: z.string().optional().describe('Collection name'),
+export const manageCollectionSchema = z.object({
+  action: z.enum(['list', 'get', 'create', 'rename', 'move', 'delete', 'get_subcollections', 'add_item', 'remove_item', 'get_items'])
+    .describe('Action to perform: list, get, create, rename, move, delete, get_subcollections, add_item, remove_item, get_items'),
+  collectionID: z.number().optional().describe('Collection ID (for get/rename/move/delete/get_subcollections/add_item/remove_item/get_items)'),
+  name: z.string().optional().describe('Collection name (for get by name or create)'),
+  newName: z.string().optional().describe('New name (for rename)'),
+  parentCollectionID: z.number().nullable().optional().describe('Parent collection ID (for create/move, null for root)'),
+  itemID: z.number().optional().describe('Item ID (for add_item/remove_item)'),
   libraryID: z.number().optional().default(1).describe('Library ID')
 });
 
-export const createCollectionSchema = z.object({
-  name: z.string().describe('Name of the new collection'),
-  parentCollectionID: z.number().optional().describe('Parent collection ID (null for root)'),
-  libraryID: z.number().optional().default(1).describe('Library ID')
-});
-
-export const renameCollectionSchema = z.object({
-  collectionID: z.number().describe('Collection ID to rename'),
-  newName: z.string().describe('New name for the collection')
-});
-
-export const moveCollectionSchema = z.object({
-  collectionID: z.number().describe('Collection ID to move'),
-  newParentID: z.number().nullable().describe('New parent collection ID (null for root)')
-});
-
-export const deleteCollectionSchema = z.object({
-  collectionID: z.number().describe('Collection ID to delete')
-});
-
-export const getSubcollectionsSchema = z.object({
-  parentCollectionID: z.number().describe('Parent collection ID')
-});
-
 // ============================================
-// Tag Tools
+// Tag Tools (Consolidated)
 // ============================================
 
-export const listTagsSchema = z.object({});
-
-export const addTagSchema = z.object({
-  itemID: z.number().describe('Item ID to add tag to'),
-  tagName: z.string().describe('Tag name to add'),
+export const manageTagsSchema = z.object({
+  action: z.enum(['list', 'get_item_tags', 'add', 'remove', 'create'])
+    .describe('Action: list (all tags), get_item_tags, add (to item), remove (from item), create'),
+  itemID: z.number().optional().describe('Item ID (for get_item_tags/add/remove)'),
+  tagName: z.string().optional().describe('Tag name (for add/remove/create)'),
   type: z.number().optional().default(0).describe('Tag type (0=user, 1=automatic)')
-});
-
-export const removeTagSchema = z.object({
-  itemID: z.number().describe('Item ID to remove tag from'),
-  tagName: z.string().describe('Tag name to remove')
-});
-
-export const getItemTagsSchema = z.object({
-  itemID: z.number().describe('Item ID to get tags for')
-});
-
-export const createTagSchema = z.object({
-  name: z.string().describe('Tag name to create'),
-  type: z.number().optional().default(0).describe('Tag type')
 });
 
 // ============================================
@@ -87,153 +51,76 @@ export const getItemDetailsSchema = z.object({
   itemKey: z.string().optional().describe('Item key')
 });
 
-export const addItemToCollectionSchema = z.object({
-  itemID: z.number().describe('Item ID to add'),
-  collectionID: z.number().describe('Collection ID to add item to')
-});
+// ============================================
+// Abstract/Note Tools (Consolidated)
+// ============================================
 
-export const removeItemFromCollectionSchema = z.object({
-  itemID: z.number().describe('Item ID to remove'),
-  collectionID: z.number().describe('Collection ID to remove item from')
-});
-
-export const getCollectionItemsSchema = z.object({
-  collectionID: z.number().describe('Collection ID to get items from')
+export const manageItemContentSchema = z.object({
+  action: z.enum(['get_abstract', 'set_abstract', 'get_notes', 'add_note'])
+    .describe('Action: get_abstract, set_abstract, get_notes, add_note'),
+  itemID: z.number().describe('Item ID'),
+  abstract: z.string().optional().describe('Abstract text (for set_abstract)'),
+  noteContent: z.string().optional().describe('Note content in HTML (for add_note)'),
+  noteTitle: z.string().optional().default('').describe('Note title (for add_note)')
 });
 
 // ============================================
-// Abstract/Note Tools
+// PDF Tools (Consolidated)
 // ============================================
 
-export const getItemAbstractSchema = z.object({
-  itemID: z.number().describe('Item ID to get abstract for')
-});
-
-export const setItemAbstractSchema = z.object({
-  itemID: z.number().describe('Item ID to set abstract for'),
-  abstract: z.string().describe('Abstract text')
-});
-
-export const getItemNotesSchema = z.object({
-  itemID: z.number().describe('Item ID to get notes for')
-});
-
-export const addItemNoteSchema = z.object({
-  itemID: z.number().describe('Parent item ID'),
-  content: z.string().describe('Note content (can include HTML)'),
-  title: z.string().optional().default('').describe('Note title')
+export const managePDFSchema = z.object({
+  action: z.enum(['extract_text', 'get_summary', 'list', 'search', 'generate_abstract'])
+    .describe('Action: extract_text, get_summary, list (PDFs for item), search, generate_abstract'),
+  attachmentItemID: z.number().optional().describe('Attachment item ID (for extract_text/get_summary/search/generate_abstract)'),
+  parentItemID: z.number().optional().describe('Parent item ID (for list)'),
+  query: z.string().optional().describe('Search query (for search)'),
+  caseSensitive: z.boolean().optional().default(false).describe('Case sensitive search'),
+  maxLength: z.number().optional().default(1000).describe('Max abstract length (for generate_abstract)'),
+  saveToItem: z.boolean().optional().default(false).describe('Save abstract to parent item')
 });
 
 // ============================================
-// PDF Tools
+// Identifier Tools (Consolidated - single tool)
 // ============================================
-
-export const extractPDFTextSchema = z.object({
-  attachmentItemID: z.number().describe('Attachment item ID of the PDF')
-});
-
-export const getPDFSummarySchema = z.object({
-  attachmentItemID: z.number().describe('Attachment item ID of the PDF')
-});
-
-export const getItemPDFsSchema = z.object({
-  parentItemID: z.number().describe('Parent item ID to get PDFs from')
-});
-
-export const searchPDFSchema = z.object({
-  attachmentItemID: z.number().describe('Attachment item ID of the PDF'),
-  query: z.string().describe('Search query'),
-  caseSensitive: z.boolean().optional().default(false).describe('Case sensitive search')
-});
-
-export const generateAbstractFromPDFSchema = z.object({
-  attachmentItemID: z.number().describe('Attachment item ID of the PDF'),
-  maxLength: z.number().optional().default(1000).describe('Maximum length of generated abstract'),
-  saveToItem: z.boolean().optional().default(false).describe('Save generated abstract to parent item')
-});
-
-// ============================================
-// Identifier Tools (DOI/ISBN)
-// ============================================
-
-export const findByDOISchema = z.object({
-  doi: z.string().describe('DOI to search for (with or without doi.org prefix)')
-});
-
-export const findByISBNSchema = z.object({
-  isbn: z.string().describe('ISBN to search for (with or without hyphens)')
-});
 
 export const findByIdentifierSchema = z.object({
-  identifier: z.string().describe('Identifier value (DOI, ISBN, PMID, etc.)'),
-  type: z.string().optional().describe('Identifier type: doi, isbn, pmid, arxiv, url')
+  identifier: z.string().describe('Identifier value (DOI, ISBN, PMID, arXiv ID, or URL)'),
+  type: z.enum(['doi', 'isbn', 'pmid', 'arxiv', 'url', 'auto']).optional().default('auto')
+    .describe('Identifier type. Use "auto" to detect automatically')
 });
 
 // ============================================
-// Annotation Tools
+// Annotation Tools (Consolidated)
 // ============================================
 
-export const getItemAnnotationsSchema = z.object({
-  itemID: z.number().describe('Parent item ID to get annotations from')
-});
-
-export const getAttachmentAnnotationsSchema = z.object({
-  attachmentID: z.number().describe('Attachment item ID to get annotations from')
-});
-
-export const getAnnotationsByTypeSchema = z.object({
-  itemID: z.number().describe('Parent item ID'),
-  types: z.array(z.string()).describe('Annotation types: highlight, note, image, ink, underline')
-});
-
-export const getAnnotationsByColorSchema = z.object({
-  itemID: z.number().describe('Parent item ID'),
-  colors: z.array(z.string()).describe('Annotation colors (hex codes like #ffff00)')
-});
-
-export const searchAnnotationsSchema = z.object({
-  query: z.string().describe('Search query for annotation text/comments'),
-  itemID: z.number().optional().describe('Limit search to specific item')
+export const getAnnotationsSchema = z.object({
+  itemID: z.number().optional().describe('Parent item ID to get annotations from'),
+  attachmentID: z.number().optional().describe('Specific attachment ID'),
+  types: z.array(z.string()).optional().describe('Filter by types: highlight, note, image, ink, underline'),
+  colors: z.array(z.string()).optional().describe('Filter by colors (hex codes like #ffff00)'),
+  searchQuery: z.string().optional().describe('Search in annotation text/comments')
 });
 
 // ============================================
-// Fulltext Search Tools
+// Fulltext Search Tools (Consolidated)
 // ============================================
 
 export const searchFulltextSchema = z.object({
-  query: z.string().describe('Search query for fulltext content'),
-  libraryID: z.number().optional().default(1).describe('Library ID')
-});
-
-export const getFulltextContentSchema = z.object({
-  attachmentID: z.number().describe('Attachment item ID to get fulltext from')
-});
-
-export const searchFulltextWithContextSchema = z.object({
-  query: z.string().describe('Search query'),
+  query: z.string().optional().describe('Search query for fulltext content'),
+  attachmentID: z.number().optional().describe('Get fulltext for specific attachment (if no query)'),
   contextLength: z.number().optional().default(100).describe('Characters of context around matches'),
   libraryID: z.number().optional().default(1).describe('Library ID')
 });
 
 // ============================================
-// Similar Items Tools
+// Similar/Related Items Tools (Consolidated)
 // ============================================
 
-export const getRelatedItemsSchema = z.object({
-  itemID: z.number().describe('Item ID to get related items for')
-});
-
-export const findSimilarByTagsSchema = z.object({
-  itemID: z.number().describe('Item ID to find similar items for'),
-  minSharedTags: z.number().optional().default(2).describe('Minimum number of shared tags')
-});
-
-export const findSimilarByCreatorsSchema = z.object({
-  itemID: z.number().describe('Item ID to find similar items for')
-});
-
-export const findSimilarByCollectionSchema = z.object({
-  itemID: z.number().describe('Item ID to find similar items for')
+export const findRelatedItemsSchema = z.object({
+  itemID: z.number().describe('Item ID to find related items for'),
+  method: z.enum(['manual', 'tags', 'creators', 'collection', 'all']).optional().default('all')
+    .describe('Method: manual (linked), tags, creators, collection, or all'),
+  minSharedTags: z.number().optional().default(2).describe('Min shared tags (for tags method)')
 });
 
 // ============================================
@@ -248,75 +135,51 @@ export const rawQuerySchema = z.object({
 });
 
 // ============================================
-// Tool Definitions
+// Library Maintenance Tools (Consolidated)
+// ============================================
+
+export const libraryMaintenanceSchema = z.object({
+  action: z.enum(['find_duplicates', 'validate_attachments', 'get_valid_attachment', 'find_with_valid_pdf', 'cleanup_orphans', 'merge_items'])
+    .describe('Action: find_duplicates, validate_attachments, get_valid_attachment, find_with_valid_pdf, cleanup_orphans, merge_items'),
+  // For find_duplicates
+  duplicateField: z.enum(['title', 'doi', 'isbn']).optional().default('title').describe('Field to check for duplicates'),
+  // For validate_attachments
+  itemID: z.number().optional().describe('Item ID to check attachments for'),
+  checkAll: z.boolean().optional().default(false).describe('Check all attachments in library'),
+  // For get_valid_attachment / find_with_valid_pdf
+  parentItemID: z.number().optional().describe('Parent item ID'),
+  contentType: z.string().optional().default('application/pdf').describe('Content type filter'),
+  title: z.string().optional().describe('Search by title'),
+  doi: z.string().optional().describe('Search by DOI'),
+  requireValidPDF: z.boolean().optional().default(true).describe('Only return items with valid PDFs'),
+  // For cleanup_orphans
+  dryRun: z.boolean().optional().default(true).describe('Only report, do not delete'),
+  // For merge_items
+  targetItemID: z.number().optional().describe('Target item to keep'),
+  sourceItemIDs: z.array(z.number()).optional().describe('Source items to merge from'),
+  libraryID: z.number().optional().default(1).describe('Library ID')
+});
+
+// ============================================
+// Tool Definitions (Consolidated: 42 → 12 tools)
 // ============================================
 
 export const toolDefinitions = [
-  // Collection Tools
+  // Collection Management (7 → 1)
   {
-    name: 'list_collections',
-    description: 'List all collections (folders) in the Zotero library',
-    inputSchema: listCollectionsSchema
-  },
-  {
-    name: 'get_collection',
-    description: 'Get a collection by ID or name',
-    inputSchema: getCollectionSchema
-  },
-  {
-    name: 'create_collection',
-    description: 'Create a new collection (folder)',
-    inputSchema: createCollectionSchema
-  },
-  {
-    name: 'rename_collection',
-    description: 'Rename an existing collection',
-    inputSchema: renameCollectionSchema
-  },
-  {
-    name: 'move_collection',
-    description: 'Move a collection to a new parent (or root)',
-    inputSchema: moveCollectionSchema
-  },
-  {
-    name: 'delete_collection',
-    description: 'Delete a collection',
-    inputSchema: deleteCollectionSchema
-  },
-  {
-    name: 'get_subcollections',
-    description: 'Get all subcollections of a collection',
-    inputSchema: getSubcollectionsSchema
+    name: 'manage_collection',
+    description: 'Manage Zotero collections: list, get, create, rename, move, delete, get_subcollections, add/remove items, get collection items',
+    inputSchema: manageCollectionSchema
   },
 
-  // Tag Tools
+  // Tag Management (5 → 1)
   {
-    name: 'list_tags',
-    description: 'List all tags in the library',
-    inputSchema: listTagsSchema
-  },
-  {
-    name: 'add_tag',
-    description: 'Add a tag to an item',
-    inputSchema: addTagSchema
-  },
-  {
-    name: 'remove_tag',
-    description: 'Remove a tag from an item',
-    inputSchema: removeTagSchema
-  },
-  {
-    name: 'get_item_tags',
-    description: 'Get all tags for an item',
-    inputSchema: getItemTagsSchema
-  },
-  {
-    name: 'create_tag',
-    description: 'Create a new tag',
-    inputSchema: createTagSchema
+    name: 'manage_tags',
+    description: 'Manage tags: list all, get item tags, add/remove tags from items, create new tags',
+    inputSchema: manageTagsSchema
   },
 
-  // Item Tools
+  // Item Search & Details (kept separate as core functionality)
   {
     name: 'search_items',
     description: 'Search items by title',
@@ -324,166 +187,68 @@ export const toolDefinitions = [
   },
   {
     name: 'get_item_details',
-    description: 'Get detailed information about an item',
+    description: 'Get detailed information about an item by ID or key',
     inputSchema: getItemDetailsSchema
   },
+
+  // Abstract & Notes (4 → 1)
   {
-    name: 'add_item_to_collection',
-    description: 'Add an item to a collection',
-    inputSchema: addItemToCollectionSchema
-  },
-  {
-    name: 'remove_item_from_collection',
-    description: 'Remove an item from a collection',
-    inputSchema: removeItemFromCollectionSchema
-  },
-  {
-    name: 'get_collection_items',
-    description: 'Get all items in a collection',
-    inputSchema: getCollectionItemsSchema
+    name: 'manage_item_content',
+    description: 'Manage item content: get/set abstract, get/add notes',
+    inputSchema: manageItemContentSchema
   },
 
-  // Abstract/Note Tools
+  // PDF Operations (5 → 1)
   {
-    name: 'get_item_abstract',
-    description: 'Get the abstract of an item',
-    inputSchema: getItemAbstractSchema
-  },
-  {
-    name: 'set_item_abstract',
-    description: 'Set or update the abstract of an item',
-    inputSchema: setItemAbstractSchema
-  },
-  {
-    name: 'get_item_notes',
-    description: 'Get all notes attached to an item',
-    inputSchema: getItemNotesSchema
-  },
-  {
-    name: 'add_item_note',
-    description: 'Add a note to an item',
-    inputSchema: addItemNoteSchema
+    name: 'manage_pdf',
+    description: 'PDF operations: extract text, get summary, list PDFs, search within PDF, generate abstract',
+    inputSchema: managePDFSchema
   },
 
-  // PDF Tools
-  {
-    name: 'extract_pdf_text',
-    description: 'Extract full text from a PDF attachment',
-    inputSchema: extractPDFTextSchema
-  },
-  {
-    name: 'get_pdf_summary',
-    description: 'Get summary information about a PDF',
-    inputSchema: getPDFSummarySchema
-  },
-  {
-    name: 'get_item_pdfs',
-    description: 'Get all PDF attachments for an item',
-    inputSchema: getItemPDFsSchema
-  },
-  {
-    name: 'search_pdf',
-    description: 'Search within a PDF for specific text',
-    inputSchema: searchPDFSchema
-  },
-  {
-    name: 'generate_abstract_from_pdf',
-    description: 'Extract and generate an abstract from PDF content',
-    inputSchema: generateAbstractFromPDFSchema
-  },
-
-  // Identifier Tools
-  {
-    name: 'find_by_doi',
-    description: 'Find an item by its DOI',
-    inputSchema: findByDOISchema
-  },
-  {
-    name: 'find_by_isbn',
-    description: 'Find an item by its ISBN',
-    inputSchema: findByISBNSchema
-  },
+  // Identifier Lookup (3 → 1)
   {
     name: 'find_by_identifier',
-    description: 'Find an item by any identifier (DOI, ISBN, PMID, arXiv, URL)',
+    description: 'Find item by identifier (DOI, ISBN, PMID, arXiv, URL) with auto-detection',
     inputSchema: findByIdentifierSchema
   },
 
-  // Annotation Tools
+  // Annotations (5 → 1)
   {
-    name: 'get_item_annotations',
-    description: 'Get all annotations (highlights, notes, etc.) from an item\'s PDF attachments',
-    inputSchema: getItemAnnotationsSchema
-  },
-  {
-    name: 'get_attachment_annotations',
-    description: 'Get annotations from a specific PDF attachment',
-    inputSchema: getAttachmentAnnotationsSchema
-  },
-  {
-    name: 'get_annotations_by_type',
-    description: 'Get annotations filtered by type (highlight, note, image, ink, underline)',
-    inputSchema: getAnnotationsByTypeSchema
-  },
-  {
-    name: 'get_annotations_by_color',
-    description: 'Get annotations filtered by color',
-    inputSchema: getAnnotationsByColorSchema
-  },
-  {
-    name: 'search_annotations',
-    description: 'Search annotations by text content',
-    inputSchema: searchAnnotationsSchema
+    name: 'get_annotations',
+    description: 'Get annotations from PDFs with optional filters by type, color, or search query',
+    inputSchema: getAnnotationsSchema
   },
 
-  // Fulltext Search Tools
+  // Fulltext Search (3 → 1)
   {
     name: 'search_fulltext',
-    description: 'Search in Zotero\'s fulltext index (searches indexed PDF content)',
+    description: 'Search Zotero fulltext index or get fulltext content of an attachment',
     inputSchema: searchFulltextSchema
   },
+
+  // Related Items (4 → 1)
   {
-    name: 'get_fulltext_content',
-    description: 'Get the indexed fulltext content of an attachment',
-    inputSchema: getFulltextContentSchema
-  },
-  {
-    name: 'search_fulltext_with_context',
-    description: 'Search fulltext and return matching context snippets',
-    inputSchema: searchFulltextWithContextSchema
+    name: 'find_related_items',
+    description: 'Find related items by manual links, shared tags, creators, or collection',
+    inputSchema: findRelatedItemsSchema
   },
 
-  // Similar Items Tools
-  {
-    name: 'get_related_items',
-    description: 'Get manually linked related items',
-    inputSchema: getRelatedItemsSchema
-  },
-  {
-    name: 'find_similar_by_tags',
-    description: 'Find items with similar tags',
-    inputSchema: findSimilarByTagsSchema
-  },
-  {
-    name: 'find_similar_by_creators',
-    description: 'Find items by the same authors/creators',
-    inputSchema: findSimilarByCreatorsSchema
-  },
-  {
-    name: 'find_similar_by_collection',
-    description: 'Find items in the same collections',
-    inputSchema: findSimilarByCollectionSchema
-  },
-
-  // Utility Tools
+  // Utilities
   {
     name: 'get_database_info',
-    description: 'Get information about the Zotero database',
+    description: 'Get Zotero database information (path, storage, counts)',
     inputSchema: getDatabaseInfoSchema
   },
   {
     name: 'raw_query',
-    description: 'Execute a raw SQL SELECT query (read-only)',
+    description: 'Execute raw SQL SELECT query (read-only)',
     inputSchema: rawQuerySchema
+  },
+
+  // Library Maintenance (6 → 1)
+  {
+    name: 'library_maintenance',
+    description: 'Library maintenance: find duplicates, validate attachments, get valid attachment, find items with valid PDF, cleanup orphans, merge items',
+    inputSchema: libraryMaintenanceSchema
   }
 ];

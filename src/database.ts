@@ -1409,4 +1409,339 @@ export class ZoteroDatabase {
   run(sql: string, params: any[] = []): { changes: number; lastInsertRowid: number } {
     return this.execute(sql, params);
   }
+
+  // ============================================
+  // Duplicate Detection & Attachment Validation
+  // ============================================
+
+  /**
+   * Find duplicate items based on title, DOI, or ISBN
+   */
+  findDuplicates(field: 'title' | 'doi' | 'isbn' = 'title', libraryID: number = 1): any[] {
+    if (field === 'title') {
+      // Find items with the same title
+      return this.queryAll(`
+        SELECT 
+          iv.value as title,
+          GROUP_CONCAT(i.itemID) as itemIDs,
+          COUNT(*) as count
+        FROM items i
+        JOIN itemData id ON i.itemID = id.itemID
+        JOIN itemDataValues iv ON id.valueID = iv.valueID
+        JOIN fields f ON id.fieldID = f.fieldID
+        WHERE f.fieldName = 'title'
+          AND i.libraryID = ?
+          AND i.itemTypeID NOT IN (1, 14)  -- Exclude notes and attachments
+        GROUP BY iv.value
+        HAVING COUNT(*) > 1
+        ORDER BY count DESC
+      `, [libraryID]);
+    } else if (field === 'doi') {
+      return this.queryAll(`
+        SELECT 
+          iv.value as doi,
+          GROUP_CONCAT(i.itemID) as itemIDs,
+          COUNT(*) as count
+        FROM items i
+        JOIN itemData id ON i.itemID = id.itemID
+        JOIN itemDataValues iv ON id.valueID = iv.valueID
+        JOIN fields f ON id.fieldID = f.fieldID
+        WHERE f.fieldName = 'DOI'
+          AND i.libraryID = ?
+          AND iv.value != ''
+        GROUP BY LOWER(iv.value)
+        HAVING COUNT(*) > 1
+        ORDER BY count DESC
+      `, [libraryID]);
+    } else {
+      return this.queryAll(`
+        SELECT 
+          iv.value as isbn,
+          GROUP_CONCAT(i.itemID) as itemIDs,
+          COUNT(*) as count
+        FROM items i
+        JOIN itemData id ON i.itemID = id.itemID
+        JOIN itemDataValues iv ON id.valueID = iv.valueID
+        JOIN fields f ON id.fieldID = f.fieldID
+        WHERE f.fieldName = 'ISBN'
+          AND i.libraryID = ?
+          AND iv.value != ''
+        GROUP BY REPLACE(REPLACE(iv.value, '-', ''), ' ', '')
+        HAVING COUNT(*) > 1
+        ORDER BY count DESC
+      `, [libraryID]);
+    }
+  }
+
+  /**
+   * Validate attachment files exist on disk
+   */
+  validateAttachments(itemID?: number, checkAll: boolean = false): {
+    valid: any[];
+    missing: any[];
+    total: number;
+  } {
+    let attachments: any[];
+    
+    if (itemID) {
+      attachments = this.queryAll(`
+        SELECT ia.itemID, ia.parentItemID, ia.path, ia.contentType, i.key
+        FROM itemAttachments ia
+        JOIN items i ON ia.itemID = i.itemID
+        WHERE ia.parentItemID = ? AND ia.path IS NOT NULL
+      `, [itemID]);
+    } else if (checkAll) {
+      attachments = this.queryAll(`
+        SELECT ia.itemID, ia.parentItemID, ia.path, ia.contentType, i.key
+        FROM itemAttachments ia
+        JOIN items i ON ia.itemID = i.itemID
+        WHERE ia.path IS NOT NULL
+        LIMIT 1000
+      `);
+    } else {
+      return { valid: [], missing: [], total: 0 };
+    }
+
+    const valid: any[] = [];
+    const missing: any[] = [];
+
+    for (const att of attachments) {
+      const fullPath = this.getAttachmentPath(att.itemID);
+      if (fullPath && existsSync(fullPath)) {
+        valid.push({
+          ...att,
+          fullPath,
+          exists: true
+        });
+      } else {
+        missing.push({
+          ...att,
+          fullPath,
+          exists: false
+        });
+      }
+    }
+
+    return {
+      valid,
+      missing,
+      total: attachments.length
+    };
+  }
+
+  /**
+   * Get a valid (existing) attachment for an item
+   * Useful when multiple attachment records exist but only one file is present
+   */
+  getValidAttachment(parentItemID: number, contentType: string = 'application/pdf'): any | null {
+    const attachments = this.queryAll(`
+      SELECT ia.itemID, ia.path, ia.contentType, i.key
+      FROM itemAttachments ia
+      JOIN items i ON ia.itemID = i.itemID
+      WHERE ia.parentItemID = ? 
+        AND ia.contentType = ?
+        AND ia.path IS NOT NULL
+    `, [parentItemID, contentType]);
+
+    // Return the first attachment that actually exists
+    for (const att of attachments) {
+      const fullPath = this.getAttachmentPath(att.itemID);
+      if (fullPath && existsSync(fullPath)) {
+        return {
+          ...att,
+          fullPath,
+          exists: true
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find items with valid (existing) PDF files
+   */
+  findItemsWithValidPDF(options: {
+    title?: string;
+    doi?: string;
+    requireValidPDF?: boolean;
+  }): any[] {
+    let items: any[];
+    
+    if (options.doi) {
+      // Search by DOI
+      const normalizedDOI = options.doi.replace(/^https?:\/\/doi\.org\//i, '').replace(/^doi:/i, '').trim();
+      items = this.queryAll(`
+        SELECT DISTINCT i.itemID, i.key, i.dateAdded, iv.value as doi
+        FROM items i
+        JOIN itemData id ON i.itemID = id.itemID
+        JOIN itemDataValues iv ON id.valueID = iv.valueID
+        JOIN fields f ON id.fieldID = f.fieldID
+        WHERE f.fieldName = 'DOI' AND LOWER(iv.value) = LOWER(?)
+      `, [normalizedDOI]);
+    } else if (options.title) {
+      // Search by title
+      items = this.queryAll(`
+        SELECT DISTINCT i.itemID, i.key, i.dateAdded, iv.value as title
+        FROM items i
+        JOIN itemData id ON i.itemID = id.itemID
+        JOIN itemDataValues iv ON id.valueID = iv.valueID
+        JOIN fields f ON id.fieldID = f.fieldID
+        WHERE f.fieldName = 'title' AND iv.value LIKE ?
+        LIMIT 50
+      `, [`%${options.title}%`]);
+    } else {
+      return [];
+    }
+
+    if (!options.requireValidPDF) {
+      return items.map(item => ({
+        ...this.getItemDetails(item.itemID),
+        hasValidPDF: this.getValidAttachment(item.itemID) !== null
+      }));
+    }
+
+    // Filter to only items with valid PDF
+    const results: any[] = [];
+    for (const item of items) {
+      const validAttachment = this.getValidAttachment(item.itemID);
+      if (validAttachment) {
+        results.push({
+          ...this.getItemDetails(item.itemID),
+          validAttachment
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Find orphan attachments (records without files)
+   */
+  findOrphanAttachments(limit: number = 100): any[] {
+    const attachments = this.queryAll(`
+      SELECT ia.itemID, ia.parentItemID, ia.path, ia.contentType, i.key,
+             parent.itemID as parentExists
+      FROM itemAttachments ia
+      JOIN items i ON ia.itemID = i.itemID
+      LEFT JOIN items parent ON ia.parentItemID = parent.itemID
+      WHERE ia.path LIKE 'storage:%'
+      LIMIT ?
+    `, [limit]);
+
+    const orphans: any[] = [];
+
+    for (const att of attachments) {
+      const fullPath = this.getAttachmentPath(att.itemID);
+      if (!fullPath || !existsSync(fullPath)) {
+        orphans.push({
+          itemID: att.itemID,
+          parentItemID: att.parentItemID,
+          key: att.key,
+          path: att.path,
+          expectedPath: fullPath,
+          reason: !fullPath ? 'invalid_path' : 'file_not_found'
+        });
+      }
+    }
+
+    return orphans;
+  }
+
+  /**
+   * Delete orphan attachment records (use with caution!)
+   */
+  deleteOrphanAttachments(dryRun: boolean = true): {
+    orphans: any[];
+    deleted: number;
+    dryRun: boolean;
+  } {
+    const orphans = this.findOrphanAttachments(500);
+
+    if (dryRun || this.readonly) {
+      return {
+        orphans,
+        deleted: 0,
+        dryRun: true
+      };
+    }
+
+    let deleted = 0;
+    for (const orphan of orphans) {
+      try {
+        this.execute('DELETE FROM itemAttachments WHERE itemID = ?', [orphan.itemID]);
+        this.execute('DELETE FROM items WHERE itemID = ?', [orphan.itemID]);
+        deleted++;
+      } catch (error) {
+        console.error(`Failed to delete orphan ${orphan.itemID}:`, error);
+      }
+    }
+
+    return {
+      orphans,
+      deleted,
+      dryRun: false
+    };
+  }
+
+  /**
+   * Merge items by transferring notes and tags from source items to target
+   */
+  mergeItems(targetItemID: number, sourceItemIDs: number[]): {
+    success: boolean;
+    transferred: {
+      notes: number;
+      tags: number;
+    };
+    errors: string[];
+  } {
+    const errors: string[] = [];
+    let notesTransferred = 0;
+    let tagsTransferred = 0;
+
+    // Verify target exists
+    const target = this.getItemDetails(targetItemID);
+    if (!target) {
+      return {
+        success: false,
+        transferred: { notes: 0, tags: 0 },
+        errors: ['Target item not found']
+      };
+    }
+
+    for (const sourceID of sourceItemIDs) {
+      if (sourceID === targetItemID) continue;
+
+      // Transfer notes
+      try {
+        const notes = this.getItemNotes(sourceID);
+        for (const note of notes) {
+          this.addItemNote(targetItemID, note.note, `[Merged] ${note.title || ''}`);
+          notesTransferred++;
+        }
+      } catch (error) {
+        errors.push(`Failed to transfer notes from ${sourceID}: ${error}`);
+      }
+
+      // Transfer tags
+      try {
+        const tags = this.getItemTags(sourceID);
+        for (const tag of tags) {
+          this.addTagToItem(targetItemID, tag.name, tag.type);
+          tagsTransferred++;
+        }
+      } catch (error) {
+        errors.push(`Failed to transfer tags from ${sourceID}: ${error}`);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      transferred: {
+        notes: notesTransferred,
+        tags: tagsTransferred
+      },
+      errors
+    };
+  }
 }
