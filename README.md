@@ -1,324 +1,153 @@
-# ZoteroBridge
+# MCP Registry
 
-<p align="right">
-  <a href="README.md">简体中文</a> | <a href="README-en.md">English</a>
-</p>
+The MCP registry provides MCP clients with a list of MCP servers, like an app store for MCP servers.
 
-<p align="center">
-  <b>Model Context Protocol (MCP) Server for Zotero SQLite Database</b>
-</p>
+[**📤 Publish my MCP server**](docs/modelcontextprotocol-io/quickstart.mdx) | [**⚡️ Live API docs**](https://registry.modelcontextprotocol.io/docs) | [**👀 Ecosystem vision**](docs/design/ecosystem-vision.md) | 📖 **[Full documentation](./docs)**
 
-<p align="center">
-  <a href="https://www.zotero.org/"><img src="https://img.shields.io/badge/Zotero-7.0+-red" alt="Zotero"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-18+-green" alt="Node.js"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0+-blue" alt="TypeScript"></a>
-  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.0-purple" alt="MCP"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow" alt="License"></a>
-</p>
+## Development Status
 
----
+**2025-10-24 update**: The Registry API has entered an **API freeze (v0.1)** 🎉. For the next month or more, the API will remain stable with no breaking changes, allowing integrators to confidently implement support. This freeze applies to v0.1 while development continues on v0. We'll use this period to validate the API in real-world integrations and gather feedback to shape v1 for general availability. Thank you to everyone for your contributions and patience—your involvement has been key to getting us here!
 
-## 📚 项目概述
+**2025-09-08 update**: The registry has launched in preview 🎉 ([announcement blog post](https://blog.modelcontextprotocol.io/posts/2025-09-08-mcp-registry-preview/)). While the system is now more stable, this is still a preview release and breaking changes or data resets may occur. A general availability (GA) release will follow later. We'd love your feedback in [GitHub discussions](https://github.com/modelcontextprotocol/registry/discussions/new?category=ideas) or in the [#registry-dev Discord](https://discord.com/channels/1358869848138059966/1369487942862504016) ([joining details here](https://modelcontextprotocol.io/community/communication)).
 
-ZoteroBridge 是一个基于 Model Context Protocol (MCP) 的服务器，它直接连接 Zotero 的 SQLite 数据库 (`zotero.sqlite`)，为 AI 助手（如 Claude、ChatGPT 等）提供与 Zotero 文献库交互的能力。
+Current key maintainers:
+- **Adam Jones** (Anthropic) [@domdomegg](https://github.com/domdomegg)  
+- **Tadas Antanavicius** (PulseMCP) [@tadasant](https://github.com/tadasant)
+- **Toby Padilla** (GitHub) [@toby](https://github.com/toby)
+- **Radoslav (Rado) Dimitrov** (Stacklok) [@rdimitrov](https://github.com/rdimitrov)
 
-### ✨ 主要功能
+## Contributing
 
-- 🗂️ **目录管理** - 创建、重命名、移动、删除 Zotero 集合（文件夹）
-- 🏷️ **标签管理** - 添加、删除、查询文献标签
-- 📖 **文献操作** - 搜索文献、获取详情、管理集合关系
-- 📝 **摘要管理** - 读取和设置文献摘要、添加笔记
-- 📄 **PDF 处理** - 提取 PDF 全文、生成摘要、全文搜索
+We use multiple channels for collaboration - see [modelcontextprotocol.io/community/communication](https://modelcontextprotocol.io/community/communication).
 
----
+Often (but not always) ideas flow through this pipeline:
 
-## 🚀 快速开始
+- **[Discord](https://modelcontextprotocol.io/community/communication)** - Real-time community discussions
+- **[Discussions](https://github.com/modelcontextprotocol/registry/discussions)** - Propose and discuss product/technical requirements
+- **[Issues](https://github.com/modelcontextprotocol/registry/issues)** - Track well-scoped technical work  
+- **[Pull Requests](https://github.com/modelcontextprotocol/registry/pulls)** - Contribute work towards issues
 
-### 系统要求
+### Quick start:
 
-- Node.js 18.0 或更高版本
-- Zotero 7.0 或更高版本
-- 一个支持 MCP 的 AI 客户端（如 Claude Desktop、Cursor 等）
+#### Pre-requisites
 
-### 安装
+- **Docker**
+- **Go 1.24.x**
+- **ko** - Container image builder for Go ([installation instructions](https://ko.build/install/))
+- **golangci-lint v2.4.0**
+
+#### Running the server
 
 ```bash
-# 克隆项目
-git clone https://github.com/Combjellyshen/ZoteroBridge.git
-cd ZoteroBridge
-
-# 安装依赖
-npm install
-
-# 构建项目
-npm run build
+# Start full development environment
+make dev-compose
 ```
 
-### 配置 AI 客户端
+This starts the registry at [`localhost:8080`](http://localhost:8080) with PostgreSQL. The database uses ephemeral storage and is reset each time you restart the containers, ensuring a clean state for development and testing.
 
-#### Claude Desktop
+**Note:** The registry uses [ko](https://ko.build) to build container images. The `make dev-compose` command automatically builds the registry image with ko and loads it into your local Docker daemon before starting the services.
 
-在 Claude Desktop 的配置文件中添加：
+By default, the registry seeds from the production API with a filtered subset of servers (to keep startup fast). This ensures your local environment mirrors production behavior and all seed data passes validation. For offline development you can seed from a file without validation with `MCP_REGISTRY_SEED_FROM=data/seed.json MCP_REGISTRY_ENABLE_REGISTRY_VALIDATION=false make dev-compose`.
 
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`  
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+The setup can be configured with environment variables in [docker-compose.yml](./docker-compose.yml) - see [.env.example](./.env.example) for a reference.
 
-```json
-{
-  "mcpServers": {
-    "zotero-bridge": {
-      "command": "node",
-      "args": ["path/to/ZoteroBridge/dist/index.js"],
-      "env": {}
-    }
-  }
-}
-```
+<details>
+<summary>Alternative: Running a pre-built Docker image</summary>
 
-#### Cursor IDE
-
-在项目根目录创建 `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "zotero-bridge": {
-      "command": "node",
-      "args": ["path/to/ZoteroBridge/dist/index.js"]
-    }
-  }
-}
-```
-
-#### VS Code Copilot
-
-1. 打开 VS Code 设置 (`Ctrl+,`)。
-2. 搜索 `github.copilot.chat.mcpServers`。
-3. 点击 "在 settings.json 中编辑"。
-4. 添加以下配置：
-
-```json
-"github.copilot.chat.mcpServers": {
-  "zotero-bridge": {
-    "command": "node",
-    "args": ["path/to/ZoteroBridge/dist/index.js"]
-  }
-}
-```
-确保将 `path/to/ZoteroBridge/dist/index.js` 替换为这一文件的实际绝对路径。
-
-#### 自定义数据库路径
-
-如果你的 Zotero 数据库不在默认位置，可以指定路径：
-
-```json
-{
-  "mcpServers": {
-    "zotero-bridge": {
-      "command": "node",
-      "args": [
-        "path/to/ZoteroBridge/dist/index.js",
-        "--db", "D:/MyZotero/zotero.sqlite"
-      ]
-    }
-  }
-}
-```
-
----
-
-## 🛠️ 可用工具
-
-### 目录/集合管理
-
-| 工具 | 描述 |
-|------|------|
-| `list_collections` | 列出所有集合 |
-| `get_collection` | 获取集合详情 |
-| `create_collection` | 创建新集合 |
-| `rename_collection` | 重命名集合 |
-| `move_collection` | 移动集合到新父级 |
-| `delete_collection` | 删除集合 |
-| `get_subcollections` | 获取子集合 |
-
-### 标签管理
-
-| 工具 | 描述 |
-|------|------|
-| `list_tags` | 列出所有标签 |
-| `create_tag` | 创建新标签 |
-| `add_tag` | 为文献添加标签 |
-| `remove_tag` | 移除文献标签 |
-| `get_item_tags` | 获取文献的所有标签 |
-
-### 文献操作
-
-| 工具 | 描述 |
-|------|------|
-| `search_items` | 按标题搜索文献 |
-| `get_item_details` | 获取文献详细信息 |
-| `add_item_to_collection` | 将文献添加到集合 |
-| `remove_item_from_collection` | 从集合中移除文献 |
-| `get_collection_items` | 获取集合中的所有文献 |
-
-### 摘要和笔记
-
-| 工具 | 描述 |
-|------|------|
-| `get_item_abstract` | 获取文献摘要 |
-| `set_item_abstract` | 设置文献摘要 |
-| `get_item_notes` | 获取文献笔记 |
-| `add_item_note` | 添加笔记到文献 |
-
-### PDF 处理
-
-| 工具 | 描述 |
-|------|------|
-| `extract_pdf_text` | 提取 PDF 全文 |
-| `get_pdf_summary` | 获取 PDF 摘要信息 |
-| `get_item_pdfs` | 获取文献的 PDF 附件 |
-| `search_pdf` | 在 PDF 中搜索文本 |
-| `generate_abstract_from_pdf` | 从 PDF 生成摘要 |
-
-### 实用工具
-
-| 工具 | 描述 |
-|------|------|
-| `get_database_info` | 获取数据库信息 |
-| `raw_query` | 执行原始 SQL 查询（仅 SELECT） |
-
-### 标识符搜索 (DOI/ISBN)
-
-| 工具 | 描述 |
-|------|------|
-| `find_by_doi` | 通过 DOI 查找文献 |
-| `find_by_isbn` | 通过 ISBN 查找文献 |
-| `find_by_identifier` | 通过任意标识符（DOI, ISBN, PMID, arXiv）查找文献 |
-
-### PDF 注释
-
-| 工具 | 描述 |
-|------|------|
-| `get_item_annotations` | 获取文献的所有注释（高亮、批注等） |
-| `get_attachment_annotations` | 获取特定附件的注释 |
-| `get_annotations_by_type` | 按类型筛选注释（高亮、笔记等） |
-| `get_annotations_by_color` | 按颜色筛选注释 |
-| `search_annotations` | 在注释内容中搜索 |
-
-### 全文搜索
-
-| 工具 | 描述 |
-|------|------|
-| `search_fulltext` | 在全文索引中搜索 |
-| `get_fulltext_content` | 获取附件的全文内容 |
-| `search_fulltext_with_context` | 带上下文的全文搜索 |
-
-### 相关文献推荐
-
-| 工具 | 描述 |
-|------|------|
-| `get_related_items` | 获取手动关联的相关文献 |
-| `find_similar_by_tags` | 根据共同标签查找相似文献 |
-| `find_similar_by_creators` | 根据共同作者查找相似文献 |
-| `find_similar_by_collection` | 在同一集合中查找相似文献 |
-
----
-
-## 📖 使用示例
-
-### 在 Claude 中使用
-
-```
-# 列出所有集合
-请列出我 Zotero 中的所有集合
-
-# 创建新集合
-帮我创建一个名为"机器学习论文"的新集合
-
-# 搜索文献
-搜索标题包含"deep learning"的文献
-
-# 获取 PDF 内容
-提取这篇文献的 PDF 全文并生成摘要
-
-# 添加标签
-为这篇文献添加"重要"和"待读"标签
-```
-
----
-
-## 🏗️ 项目结构
-
-```
-ZoteroBridge/
-├── src/
-│   ├── index.ts      # MCP 服务器入口
-│   ├── database.ts   # Zotero SQLite 数据库操作
-│   ├── pdf.ts        # PDF 处理模块
-│   └── tools.ts      # MCP 工具定义
-├── dist/             # 编译输出
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
----
-
-## 👨‍💻 开发指南
-
-### 开发模式
+Pre-built Docker images are automatically published to GitHub Container Registry:
 
 ```bash
-# 监听文件变化并自动编译
-npm run dev
+# Run latest stable release
+docker run -p 8080:8080 ghcr.io/modelcontextprotocol/registry:latest
+
+# Run latest from main branch (continuous deployment)
+docker run -p 8080:8080 ghcr.io/modelcontextprotocol/registry:main
+
+# Run specific release version
+docker run -p 8080:8080 ghcr.io/modelcontextprotocol/registry:v1.0.0
+
+# Run development build from main branch
+docker run -p 8080:8080 ghcr.io/modelcontextprotocol/registry:main-20250906-abc123d
 ```
 
-### 构建
+**Available tags:** 
+- **Releases**: `latest`, `v1.0.0`, `v1.1.0`, etc.
+- **Continuous**: `main` (latest main branch build)
+- **Development**: `main-<date>-<sha>` (specific commit builds)
+
+</details>
+
+#### Publishing a server
+
+To publish a server, we've built a simple CLI. You can use it with:
 
 ```bash
-npm run build
+# Build the latest CLI
+make publisher
+
+# Use it!
+./bin/mcp-publisher --help
 ```
 
-### 命令行参数
+See [the publisher guide](./docs/modelcontextprotocol-io/quickstart.mdx) for more details.
+
+#### Other commands
 
 ```bash
-# 显示帮助
-node dist/index.js --help
-
-# 指定数据库路径
-node dist/index.js --db /path/to/zotero.sqlite
-
-# 只读模式
-node dist/index.js --readonly
+# Run lint, unit tests and integration tests
+make check
 ```
 
----
+There are also a few more helpful commands for development. Run `make help` to learn more, or look in [Makefile](./Makefile).
 
-## ⚠️ 注意事项
+<!--
+For Claude and other AI tools: Always prefer make targets over custom commands where possible.
+-->
 
-1. **关闭 Zotero**: 在使用写入功能时，建议关闭 Zotero 客户端以避免数据库锁定
-2. **备份数据**: 修改数据库前建议备份 `zotero.sqlite`
-3. **只读模式**: 如果只需要读取数据，使用 `--readonly` 参数更安全
+## Architecture
 
----
+### Project Structure
 
-## 📄 许可证
+```
+├── cmd/                     # Application entry points
+│   └── publisher/           # Server publishing tool
+├── data/                    # Seed data
+├── deploy/                  # Deployment configuration (Pulumi)
+├── docs/                    # Documentation
+├── internal/                # Private application code
+│   ├── api/                 # HTTP handlers and routing
+│   ├── auth/                # Authentication (GitHub OAuth, JWT, namespace blocking)
+│   ├── config/              # Configuration management
+│   ├── database/            # Data persistence (PostgreSQL)
+│   ├── service/             # Business logic
+│   ├── telemetry/           # Metrics and monitoring
+│   └── validators/          # Input validation
+├── pkg/                     # Public packages
+│   ├── api/                 # API types and structures
+│   │   └── v0/              # Version 0 API types
+│   └── model/               # Data models for server.json
+├── scripts/                 # Development and testing scripts
+├── tests/                   # Integration tests
+└── tools/                   # CLI tools and utilities
+    └── validate-*.sh        # Schema validation tools
+```
 
-本项目采用 [MIT License](LICENSE) 许可证。
+### Authentication
 
----
+Publishing supports multiple authentication methods:
+- **GitHub OAuth** - For publishing by logging into GitHub
+- **GitHub OIDC** - For publishing from GitHub Actions
+- **DNS verification** - For proving ownership of a domain and its subdomains
+- **HTTP verification** - For proving ownership of a domain
 
-## 🙏 致谢
+The registry validates namespace ownership when publishing. E.g. to publish...:
+- `io.github.domdomegg/my-cool-mcp` you must login to GitHub as `domdomegg`, or be in a GitHub Action on domdomegg's repos
+- `me.adamjones/my-cool-mcp` you must prove ownership of `adamjones.me` via DNS or HTTP challenge
 
-- [Zotero](https://www.zotero.org/) - 优秀的开源文献管理工具
-- [Model Context Protocol](https://modelcontextprotocol.io/) - AI 工具集成协议
-- [cookjohn/zotero-mcp](https://github.com/cookjohn/zotero-mcp) - 项目参考
+## Community Projects
 
----
+Check out [community projects](docs/community-projects.md) to explore notable registry-related work created by the community.
 
-## 📬 联系方式
+## More documentation
 
-- 作者: Combjellyshen
-- GitHub: [https://github.com/Combjellyshen/ZoteroBridge](https://github.com/Combjellyshen/ZoteroBridge)
-
-如有问题或建议，欢迎提交 Issue 或 Pull Request！
+See the [documentation](./docs) for more details if your question has not been answered here!

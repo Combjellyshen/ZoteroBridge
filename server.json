@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Combjellyshen/zotero-bridge",
+  "description": "MCP Server for Zotero SQLite Database - collection, tagging, PDF reading and more.",
+  "repository": {
+    "url": "https://github.com/Combjellyshen/ZoteroBridge",
+    "source": "github"
+  },
+  "version": "1.0.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "zotero-bridge",
+      "version": "1.0.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
