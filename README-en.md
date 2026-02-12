@@ -36,7 +36,7 @@ ZoteroBridge is a Model Context Protocol (MCP) server that connects directly to 
 
 ---
 
-## � Changelog
+## Changelog
 ### v1.1.4 (2026-02-01)
 
 🔧 **Critical Fixes - Database Compatibility**
@@ -82,7 +82,7 @@ Now working properly:
 
 ---
 
-## �🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
