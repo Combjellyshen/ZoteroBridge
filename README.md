@@ -17,11 +17,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow" alt="License"></a>
 </p>
 
-## 📚 概述
+## 概述
 
 ZoteroBridge 是一个模型上下文协议 (MCP) 服务器，可直接连接到 Zotero 的 SQLite 数据库 (`zotero.sqlite`)，让 AI 助手（如 Claude、ChatGPT、GitHub Copilot 等）能够与您的 Zotero 文献库进行交互。
 
-### ✨ 主要特性
+### 主要特性
 
 - 🗂️ **文件夹管理** - 创建、重命名、移动和删除 Zotero 文件夹（集合）
 - 🏷️ **标签管理** - 为文献添加、删除和查询标签
@@ -34,7 +34,7 @@ ZoteroBridge 是一个模型上下文协议 (MCP) 服务器，可直接连接到
 
 ---
 
-## � 更新日志
+## 更新日志
 ### v1.1.5 (2026-02-01)
 
 🗑️ **回收站识别功能**
@@ -72,7 +72,7 @@ ZoteroBridge 是一个模型上下文协议 (MCP) 服务器，可直接连接到
 
 ---
 
-## �🚀 快速开始
+## 快速开始
 
 ### 前置要求
 
@@ -185,9 +185,8 @@ npm run build
 
 ---
 
-## 🛠️ 可用工具（13 个整合工具）
+## 可用工具（13 个工具）
 
-> v1.1.0+ 版本将原有 42 个工具整合为 13 个基于动作的工具，简化了接口同时保持全部功能。
 
 ### manage_collection - 文件夹管理
 
@@ -305,7 +304,7 @@ PDF 文件的各种操作。
 
 ---
 
-## 📖 使用示例
+## 使用示例
 
 ### 与 Claude/Copilot 配合使用
 
@@ -337,7 +336,7 @@ PDF 文件的各种操作。
 
 ---
 
-## 🏗️ 项目结构
+## 项目结构
 
 ```
 ZoteroBridge/
@@ -355,7 +354,7 @@ ZoteroBridge/
 
 ---
 
-## 👨‍💻 开发指南
+## 开发指南
 
 ### 开发模式
 
@@ -385,7 +384,7 @@ zotero-bridge --readonly
 
 ---
 
-## ⚠️ 注意事项
+## 注意事项
 
 1. **关闭 Zotero**：使用写入功能时，请关闭 Zotero 客户端以避免数据库锁定
 2. **备份数据**：在进行修改前备份 `zotero.sqlite`
@@ -394,7 +393,7 @@ zotero-bridge --readonly
 
 ---
 
-## 📝 更新日志
+## 更新日志
 ### v1.1.4 (2026-02-01)
 
 🔧 **重要修复 - 数据库兼容性**
@@ -435,7 +434,7 @@ zotero-bridge --readonly
 
 ## 🙏 致谢
 
-- [Zotero](https://www.zotero.org/) - 优秀的开源文献管理工具
+- [Zotero](https://www.zotero.org/) - 开源文献管理工具
 - [Model Context Protocol](https://modelcontextprotocol.io/) - AI 工具集成协议
 - [cookjohn/zotero-mcp](https://github.com/cookjohn/zotero-mcp) - 项目参考
 
