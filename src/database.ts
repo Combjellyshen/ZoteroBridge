@@ -10,7 +10,7 @@
  */
 
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
-import { existsSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { execSync } from 'child_process';
@@ -63,20 +63,21 @@ export class ZoteroDatabase {
   private findDefaultZoteroDB(): string {
     const home = homedir();
     const possiblePaths: string[] = [];
+    const profileDirs: string[] = [];
 
     // Windows paths
     if (process.platform === 'win32') {
       possiblePaths.push(
-        join(home, 'Zotero', 'zotero.sqlite'),
-        join(process.env.APPDATA || '', 'Zotero', 'Zotero', 'Profiles')
+        join(home, 'Zotero', 'zotero.sqlite')
       );
+      profileDirs.push(join(process.env.APPDATA || '', 'Zotero', 'Zotero', 'Profiles'));
     }
     // macOS paths
     else if (process.platform === 'darwin') {
       possiblePaths.push(
-        join(home, 'Zotero', 'zotero.sqlite'),
-        join(home, 'Library', 'Application Support', 'Zotero', 'Profiles')
+        join(home, 'Zotero', 'zotero.sqlite')
       );
+      profileDirs.push(join(home, 'Library', 'Application Support', 'Zotero', 'Profiles'));
     }
     // Linux paths
     else {
@@ -88,13 +89,48 @@ export class ZoteroDatabase {
 
     // Check each path
     for (const p of possiblePaths) {
-      if (existsSync(p)) {
+      if (existsSync(p) && statSync(p).isFile()) {
         return p;
+      }
+    }
+
+    // Check known profile directories and pick the first valid zotero.sqlite
+    for (const profileDir of profileDirs) {
+      if (!profileDir || !existsSync(profileDir)) {
+        continue;
+      }
+
+      const dbFromProfile = this.findDatabaseInProfileDirectory(profileDir);
+      if (dbFromProfile) {
+        return dbFromProfile;
       }
     }
 
     // Default fallback
     return join(home, 'Zotero', 'zotero.sqlite');
+  }
+
+  /**
+   * Find zotero.sqlite inside Zotero Profiles directory
+   */
+  private findDatabaseInProfileDirectory(profileDir: string): string | null {
+    try {
+      const entries = readdirSync(profileDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue;
+        }
+
+        const dbCandidate = join(profileDir, entry.name, 'zotero.sqlite');
+        if (existsSync(dbCandidate) && statSync(dbCandidate).isFile()) {
+          return dbCandidate;
+        }
+      }
+    } catch {
+      // Ignore profile directory access errors and continue fallback flow
+    }
+
+    return null;
   }
 
   /**
