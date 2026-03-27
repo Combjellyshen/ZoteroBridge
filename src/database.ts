@@ -742,7 +742,13 @@ export class ZoteroDatabase {
       return false;
     }
     
-    this.execute('INSERT INTO collectionItems (itemID, collectionID, orderIndex) VALUES (?, ?, 0)', [itemID, collectionID]);
+    // Append at end of collection ordering (matching Zotero's behavior)
+    const maxOrder = this.queryOne(
+      'SELECT IFNULL(MAX(orderIndex)+1, 0) as nextOrder FROM collectionItems WHERE collectionID = ?',
+      [collectionID]
+    );
+    this.execute('INSERT INTO collectionItems (itemID, collectionID, orderIndex) VALUES (?, ?, ?)',
+      [itemID, collectionID, maxOrder?.nextOrder || 0]);
     
     // CRITICAL: Update item metadata for Zotero compatibility
     this.updateItemMetadata(itemID);
