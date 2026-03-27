@@ -1050,7 +1050,7 @@ export class ZoteroDatabase {
    */
   getStoragePath(): string {
     // Storage is usually in the same directory as the database
-    return join(this.dbPath.replace('zotero.sqlite', ''), 'storage');
+    return join(dirname(this.dbPath), 'storage');
   }
 
   // ============================================
