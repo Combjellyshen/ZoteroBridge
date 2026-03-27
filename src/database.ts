@@ -531,10 +531,10 @@ export class ZoteroDatabase {
    */
   createCollection(name: string, parentCollectionID: number | null = null, libraryID: number = 1): number {
     const key = this.generateKey();
-    
+
     const result = this.execute(`
-      INSERT INTO collections (collectionName, parentCollectionID, libraryID, key, version, clientDateModified)
-      VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+      INSERT INTO collections (collectionName, parentCollectionID, libraryID, key, version, synced, clientDateModified)
+      VALUES (?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP)
     `, [name, parentCollectionID, libraryID, key]);
     
     if (!this.readonly) {
@@ -550,7 +550,7 @@ export class ZoteroDatabase {
   renameCollection(collectionID: number, newName: string): boolean {
     const result = this.execute(`
       UPDATE collections
-      SET collectionName = ?, version = version + 1, clientDateModified = CURRENT_TIMESTAMP
+      SET collectionName = ?, version = version + 1, synced = 0, clientDateModified = CURRENT_TIMESTAMP
       WHERE collectionID = ?
     `, [newName, collectionID]);
     
@@ -567,7 +567,7 @@ export class ZoteroDatabase {
   moveCollection(collectionID: number, newParentID: number | null): boolean {
     const result = this.execute(`
       UPDATE collections
-      SET parentCollectionID = ?, version = version + 1, clientDateModified = CURRENT_TIMESTAMP
+      SET parentCollectionID = ?, version = version + 1, synced = 0, clientDateModified = CURRENT_TIMESTAMP
       WHERE collectionID = ?
     `, [newParentID, collectionID]);
     
@@ -582,16 +582,20 @@ export class ZoteroDatabase {
    * Delete a collection
    */
   deleteCollection(collectionID: number): boolean {
-    // First, remove all items from collection
-    this.execute('DELETE FROM collectionItems WHERE collectionID = ?', [collectionID]);
-    
-    // Then delete the collection
+    // Record in deletedCollections for sync (soft-delete pattern matching Zotero)
+    try {
+      this.execute('INSERT OR IGNORE INTO deletedCollections (collectionID) VALUES (?)', [collectionID]);
+    } catch {
+      // deletedCollections table may not exist in older Zotero versions
+    }
+
+    // Delete the collection (collectionItems and subcollections are handled by ON DELETE CASCADE)
     const result = this.execute('DELETE FROM collections WHERE collectionID = ?', [collectionID]);
-    
+
     if (!this.readonly && result.changes > 0) {
       this.save();
     }
-    
+
     return result.changes > 0;
   }
 
@@ -738,7 +742,7 @@ export class ZoteroDatabase {
       return false;
     }
     
-    this.execute('INSERT INTO collectionItems (itemID, collectionID) VALUES (?, ?)', [itemID, collectionID]);
+    this.execute('INSERT INTO collectionItems (itemID, collectionID, orderIndex) VALUES (?, ?, 0)', [itemID, collectionID]);
     
     // CRITICAL: Update item metadata for Zotero compatibility
     this.updateItemMetadata(itemID);
@@ -1572,18 +1576,17 @@ export class ZoteroDatabase {
 
   /**
    * Generate a unique Zotero key
-   * 
+   *
    * Zotero uses a specific character set that excludes ambiguous characters:
    * - No '0' (zero) - confused with 'O'
-   * - No '1' (one) - confused with 'I' or 'L'  
-   * - No 'I' - confused with '1' or 'L'
-   * - No 'L' - confused with '1' or 'I'
+   * - No '1' (one) - confused with 'l'
    * - No 'O' - confused with '0'
-   * 
-   * Valid characters: 23456789ABCDEFGHJKMNPQRSTUVWXYZ
+   *
+   * Valid characters: 23456789ABCDEFGHIJKLMNPQRSTUVWXYZ (32 chars)
+   * Source: zotero/utilities - Zotero.Utilities.allowedKeyChars
    */
   private generateKey(): string {
-    const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+    const chars = '23456789ABCDEFGHIJKLMNPQRSTUVWXYZ';
     let key = '';
     for (let i = 0; i < 8; i++) {
       key += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -1971,7 +1974,7 @@ export class ZoteroDatabase {
           const attachments = this.queryAll(`
             SELECT itemID FROM itemAttachments WHERE parentItemID = ?
           `, [sourceID]);
-          
+
           for (const att of attachments) {
             this.execute(`
               UPDATE itemAttachments SET parentItemID = ? WHERE itemID = ?
@@ -1980,6 +1983,14 @@ export class ZoteroDatabase {
           }
         } catch (error) {
           errors.push(`Failed to transfer attachments from ${sourceID}: ${error}`);
+        }
+
+        // Move source item to trash (following Zotero's merge pattern)
+        try {
+          this.execute('INSERT OR IGNORE INTO deletedItems (itemID) VALUES (?)', [sourceID]);
+          this.updateItemMetadata(sourceID);
+        } catch (error) {
+          errors.push(`Failed to trash source item ${sourceID}: ${error}`);
         }
       }
 
