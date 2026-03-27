@@ -1384,23 +1384,13 @@ export class ZoteroDatabase {
 
   /**
    * Get fulltext content for an attachment
-   * Note: fulltextContent table may not exist in all Zotero versions
+   *
+   * Note: Zotero uses a hand-rolled inverted index (fulltextWords + fulltextItemWords)
+   * rather than storing raw content. The fulltextContent table does NOT exist in the
+   * official schema. We reconstruct a word list from the inverted index as a fallback.
    */
   getFulltextContent(attachmentID: number): string | null {
-    // Try fulltextContent table first (Zotero 7+)
-    try {
-      const content = this.queryOne(`
-        SELECT content FROM fulltextContent WHERE itemID = ?
-      `, [attachmentID]);
-      
-      if (content?.content) {
-        return content.content;
-      }
-    } catch {
-      // Table doesn't exist, continue to fallback
-    }
-    
-    // Fallback: try to reconstruct from fulltextWords and fulltextItemWords
+    // Reconstruct from fulltextWords and fulltextItemWords (Zotero's inverted index)
     try {
       const words = this.queryAll(`
         SELECT fw.word 
