@@ -152,22 +152,22 @@ export class PDFProcessor {
    * Search for text within PDF content
    */
   searchInPDF(content: PDFContent, query: string, caseSensitive: boolean = false): string[] {
-    const text = caseSensitive ? content.text : content.text.toLowerCase();
+    const originalLines = content.text.split('\n');
+    const searchLines = caseSensitive ? originalLines : originalLines.map(l => l.toLowerCase());
     const searchQuery = caseSensitive ? query : query.toLowerCase();
-    
+
     const results: string[] = [];
-    const lines = text.split('\n');
-    
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(searchQuery)) {
-        // Get context (previous and next lines)
+
+    for (let i = 0; i < searchLines.length; i++) {
+      if (searchLines[i].includes(searchQuery)) {
+        // Get context (previous and next lines) from original text
         const start = Math.max(0, i - 1);
-        const end = Math.min(lines.length - 1, i + 1);
-        const context = lines.slice(start, end + 1).join(' ').replace(/\s+/g, ' ').trim();
+        const end = Math.min(originalLines.length - 1, i + 1);
+        const context = originalLines.slice(start, end + 1).join(' ').replace(/\s+/g, ' ').trim();
         results.push(context);
       }
     }
-    
+
     return results;
   }
 

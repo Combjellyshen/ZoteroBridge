@@ -39,7 +39,7 @@ import {
 
 // Server configuration
 const SERVER_NAME = 'zotero-bridge';
-const SERVER_VERSION = '1.1.0';
+const SERVER_VERSION = '1.1.5';
 
 // Parse command line arguments
 function parseArgs(): { dbPath?: string; readonly: boolean } {
