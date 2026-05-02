@@ -82,13 +82,8 @@ ZoteroBridge 是一个模型上下文协议 (MCP) 服务器，可直接连接到
 
 ### 安装方式
 
-#### 方式一：通过 npm 全局安装（推荐）
 
-```bash
-npm install -g zotero-bridge
-```
-
-#### 方式二：从源码构建
+#### 从源码构建
 
 ```bash
 # 克隆仓库
