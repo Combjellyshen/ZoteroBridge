@@ -92,13 +92,7 @@ Now working properly:
 
 ### Installation
 
-#### Option 1: Install via npm (Recommended)
-
-```bash
-npm install -g zotero-bridge
-```
-
-#### Option 2: Build from Source
+#### Build from Source
 
 ```bash
 # Clone the repository
